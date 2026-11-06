@@ -16,7 +16,7 @@ Employees at a bank waste hours hunting for the right policy, contract, or compl
 
 - **Fictional bank, synthetic data only.** "Riyadh Trust Bank" is not a real bank. All 8 documents (24 pages) are fictional, created for this demo. **No real customer data, ever.**
 - **Local-first, $0.** Runs on a laptop without Docker or any cloud service: Python venv + Node + local PostgreSQL. No paid APIs, no paid LLM — answers run in extractive-fallback mode until Ollama is installed.
-- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.2).
+- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.3).
 
 ## Features
 
@@ -132,7 +132,7 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 
 ---
 
-## Build history (v0.1 → v0.10.2)
+## Build history (v0.1 → v0.10.3)
 
 > The section below is a chronological build log, written as each version was completed. Some older lines describe the state at the time, when a feature had not been built yet; the current state is described in "What it is" above. No facts have been removed.
 
@@ -142,6 +142,8 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 > Docker is optional only (`infra/docker-compose.optional.yml`) — for machines where Docker does run.
 
 Enterprise Intelligence Platform for a fictional Saudi bank (Riyadh Trust Bank) — a portfolio project, not a real company, with no real customer data.
+
+Status: **v0.10.3 DONE — All README screenshots retaken.** The old v0.7 login screenshot still showed Roman Urdu demo labels ("(sab kuch)", "(sirf Retail)") even though the code was already English — text scans cannot see inside images. All 6 README screenshots (landing, sign in, sign up, chat, monitoring, landing) were retaken from the v0.10.3 build in a real headless browser and visually + OCR-verified: no Roman Urdu anywhere, including inside the images.
 
 Status: **v0.10.2 DONE — Login bounce fixed.** Browser login no longer bounces back to the sign-in page: the frontend now calls the API on the same host the page was opened on (localhost or 127.0.0.1), so the SameSite=Lax httpOnly cookies are sent on every request, and CORS allows both local host spellings. Verified in a real headless browser from both hosts (login → chat → reload still logged in → logout). Details in `docs/LOGIN-FIX.md`.
 

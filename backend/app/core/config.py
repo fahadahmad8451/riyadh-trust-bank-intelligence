@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "Riyadh Trust Bank — Enterprise Intelligence Platform"
-    version: str = "0.10.2"
+    version: str = "0.10.3"
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     vector_store_dir: str = os.getenv("VECTOR_STORE_DIR", "data/vector_store")
     environment: str = os.getenv("ENVIRONMENT", "development")

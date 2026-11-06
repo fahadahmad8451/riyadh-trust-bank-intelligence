@@ -1,4 +1,4 @@
-# CI — Project 1 v0.10.2. Backend full test suite + frontend production build.
+# CI — Project 1 v0.10.3. Backend full test suite + frontend production build.
 # Runs on every push and pull request. No Docker, no secrets, no external
 # services: tests use the local file vector store and synthetic documents.
 name: ci

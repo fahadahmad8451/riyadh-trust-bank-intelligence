@@ -108,7 +108,7 @@ export default function Landing() {
               </div>
             ))}
           </dl>
-          <p className="mt-10 text-xs text-slate-400">Build v0.10.2</p>
+          <p className="mt-10 text-xs text-slate-400">Build v0.10.3</p>
         </div>
       </section>
 
@@ -165,10 +165,10 @@ export default function Landing() {
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="footer-title font-semibold text-white">Riyadh Trust Bank — Enterprise Intelligence Platform</p>
           <p>
-            Demo deployment — synthetic documents only, no real customer data. Tokens are stored in
-            the browser (demo setup).
+            Demo deployment — synthetic documents only, no real customer data. Auth uses httpOnly
+            cookies (demo setup).
           </p>
-          <p className="text-xs text-slate-400">v0.10.2</p>
+          <p className="text-xs text-slate-400">v0.10.3</p>
         </div>
       </footer>
     </div>
