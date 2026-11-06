@@ -1,0 +1,26 @@
+# CI — Project 1 v0.9.1. Backend full test suite + frontend production build.
+# Runs on every push and pull request. No Docker, no secrets, no external
+# services: tests use the local file vector store and synthetic documents.
+name: ci
+on: [push, pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run full test suite
+        run: python -m pytest tests/ -v
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install dependencies
+        run: cd frontend && npm ci
+      - name: Production build
+        run: cd frontend && npm run build
