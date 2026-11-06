@@ -12,6 +12,9 @@ jobs:
         with: { python-version: "3.12" }
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
+      - name: Build vector store (data/vector_store is generated, not committed)
+        working-directory: backend
+        run: python ../scripts/index_chunks.py
       - name: Run full test suite
         run: python -m pytest tests/ -v
   frontend:
