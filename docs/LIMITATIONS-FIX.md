@@ -271,9 +271,12 @@ Honest design for a local/demo system: no reset token is emailed anywhere.
   English.
 - Zip: `~/workspace/your_files/Project-1-Fixes-v0.10.zip` (verified with
   `unzip -l`).
-- GitHub: commit "v0.10.0 — close fixable limitations: httpOnly cookie auth,
-  admin password reset, Arabic PDF logical order, deterministic RBAC topic
-  gate" pushed to `main` — **FILL COMMIT HASH AFTER PUSH**.
+- GitHub: commit **b8dcbbf** "v0.10.0 — close fixable limitations: httpOnly
+  cookie auth, admin password reset, Arabic PDF logical order,
+  deterministic RBAC topic gate" pushed to `main` (50 files, public repo
+  fahadahmad8451/riyadh-trust-bank-intelligence); CI run 42184059698
+  triggered on push (in progress at push time — not waited on, per the
+  task). This hash line itself was recorded in a follow-up docs commit.
 
 ## Gotchas found during this task (keep for next time)
 
