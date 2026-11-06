@@ -53,9 +53,13 @@ AML_QUESTION = "What is the AML reporting threshold?"
 
 class Smoke:
     def __init__(self, base_url: str):
+        # Anonymous client: health, metrics, and the no-token 401 check.
         self.client = httpx.Client(base_url=base_url, timeout=120.0, trust_env=False)
+        # v0.10 (httpOnly cookies): one client per role — each keeps
+        # its own cookie jar, so a service chat cannot accidentally
+        # carry the admin session (or vice versa).
+        self.role_clients: dict[str, httpx.Client] = {}
         self.results: list[tuple[str, str, str]] = []  # (name, verdict, detail)
-        self.tokens: dict[str, str] = {}
         self.latencies: list[float] = []
 
     def check(self, name: str, ok: bool, detail: str = "") -> bool:
@@ -63,12 +67,13 @@ class Smoke:
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}  {detail}")
         return ok
 
-    def login(self, role: str) -> str | None:
+    def login(self, role: str) -> bool:
         email, password = USERS[role]
-        res = self.client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        client = httpx.Client(base_url=str(self.client.base_url), timeout=120.0, trust_env=False)
+        res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
         if res.status_code != 200:
             self.check(f"login {role}", False, f"HTTP {res.status_code}: {res.text[:120]}")
-            return None
+            return False
         data = res.json()["data"]
         ok = data["user"]["role"] == {
             "admin": "ADMIN",
@@ -77,19 +82,25 @@ class Smoke:
         }[role]
         self.check(f"login {role}", ok, f"role={data['user']['role']}")
         if ok:
-            self.tokens[role] = data["access_token"]
-            return data["access_token"]
-        return None
+            # The session lives in the client's httpOnly cookie jar.
+            self.role_clients[role] = client
+            return True
+        return False
 
-    def chat(self, token: str, question: str) -> tuple[int, dict, float]:
+    def chat(self, role: str, question: str) -> tuple[int, dict, float]:
         started = time.monotonic()
-        res = self.client.post(
+        res = self.role_clients[role].post(
             "/api/v1/chat",
             json={"question": question},
-            headers={"Authorization": f"Bearer {token}"},
         )
         wall = time.monotonic() - started
         return res.status_code, (res.json() if res.status_code == 200 else {}), wall
+
+    def _role_get(self, role: str, path: str):
+        return self.role_clients[role].get(path)
+
+    def _role_post(self, role: str, path: str, **kwargs):
+        return self.role_clients[role].post(path, **kwargs)
 
     def run(self) -> int:
         print("== Staging smoke test ==")
@@ -108,7 +119,7 @@ class Smoke:
                    res.status_code == 200 and data.get("environment") == "staging",
                    f"HTTP {res.status_code}, environment={data.get('environment')}, "
                    f"version={data.get('version')}")
-        self.check("health version 0.9.1", data.get("version") == "0.9.1",
+        self.check("health version 0.10.0", data.get("version") == "0.10.0",
                    f"version={data.get('version')}")
         res = self.client.get("/api/v1/metrics")
         mdata = res.json().get("data", {}) if res.status_code == 200 else {}
@@ -125,13 +136,12 @@ class Smoke:
         res = self.client.post("/api/v1/chat", json={"question": "Hello?"})
         self.check("no-token chat -> 401", res.status_code == 401, f"HTTP {res.status_code}")
 
-        if "admin" not in self.tokens or "service" not in self.tokens \
-                or "compliance" not in self.tokens:
+        if not all(r in self.role_clients for r in ("admin", "service", "compliance")):
             print("Logins failed — cannot run the chat checks.")
             return self.finish()
 
         # 5. EN chats (warm-up + 3 timed = latency re-measurement) --------
-        status, body, _ = self.chat(self.tokens["admin"], EN_QUESTIONS[0])
+        status, body, _ = self.chat("admin", EN_QUESTIONS[0])
         d = body.get("data", {})
         cites = [c.get("document_title", "") for c in d.get("citations", [])]
         self.check("EN chat (warm-up) answered + cited",
@@ -139,7 +149,7 @@ class Smoke:
                    f"HTTP {status}, top={cites[0] if cites else 'none'}, "
                    f"latency_ms={d.get('latency_ms')}")
         for question in EN_QUESTIONS:
-            status, body, wall = self.chat(self.tokens["admin"], question)
+            status, body, wall = self.chat("admin", question)
             d = body.get("data", {})
             self.latencies.append(wall)
             cites = [c.get("document_title", "") for c in d.get("citations", [])]
@@ -153,7 +163,7 @@ class Smoke:
                   f"median={sorted(self.latencies)[1]:.2f}s  (target < 3s)")
 
         # 6. AR chat (compliance) ------------------------------------------
-        status, body, wall = self.chat(self.tokens["compliance"], AR_QUESTION)
+        status, body, wall = self.chat("compliance", AR_QUESTION)
         d = body.get("data", {})
         cites = [c.get("document_title", "") for c in d.get("citations", [])]
         self.check("AR chat (compliance) AML cited",
@@ -161,7 +171,7 @@ class Smoke:
                    f"HTTP {status}, wall={wall:.2f}s, top={cites[0] if cites else 'none'}")
 
         # 7. RBAC — service must NOT get the AML answer --------------------
-        status, body, _ = self.chat(self.tokens["service"], AML_QUESTION)
+        status, body, _ = self.chat("service", AML_QUESTION)
         d = body.get("data", {})
         self.check("RBAC: service AML question refused, 0 citations",
                    status == 200 and d.get("refused") is True
@@ -171,29 +181,26 @@ class Smoke:
 
         # 8. documents list per role ---------------------------------------
         for role, expected in (("service", 4), ("admin", 8)):
-            res = self.client.get("/api/v1/documents",
-                                  headers={"Authorization": f"Bearer {self.tokens[role]}"})
+            res = self._role_get(role, "/api/v1/documents")
             docs = res.json().get("data", {}).get("documents", []) if res.status_code == 200 else []
             self.check(f"documents list ({role}) = {expected}",
                        res.status_code == 200 and len(docs) == expected,
                        f"HTTP {res.status_code}, count={len(docs)}")
 
         # 9. feedback -------------------------------------------------------
-        status, body, _ = self.chat(self.tokens["admin"], EN_QUESTIONS[1])
+        status, body, _ = self.chat("admin", EN_QUESTIONS[1])
         message_id = body.get("data", {}).get("message_id")
         ok = False
         if message_id:
-            res = self.client.post(
-                "/api/v1/feedback",
+            res = self._role_post(
+                "admin", "/api/v1/feedback",
                 json={"message_id": message_id, "rating": "up"},
-                headers={"Authorization": f"Bearer {self.tokens['admin']}"},
             )
             ok = res.status_code == 200
             self.check("feedback thumbs-up", ok,
                        f"HTTP {res.status_code}, "
                        f"{res.json().get('data', {}).get('message', '') if ok else res.text[:100]}")
-            res = self.client.get("/api/v1/admin/feedback-stats",
-                                  headers={"Authorization": f"Bearer {self.tokens['admin']}"})
+            res = self._role_get("admin", "/api/v1/admin/feedback-stats")
             stats = res.json().get("data", {}) if res.status_code == 200 else {}
             self.check("feedback-stats shows the vote",
                        res.status_code == 200 and stats.get("total", 0) >= 1,
@@ -202,8 +209,7 @@ class Smoke:
             self.check("feedback thumbs-up", False, "no message_id returned by chat")
 
         # 10. eval/results --------------------------------------------------
-        res = self.client.get("/api/v1/eval/results",
-                              headers={"Authorization": f"Bearer {self.tokens['admin']}"})
+        res = self._role_get("admin", "/api/v1/eval/results")
         if res.status_code == 200:
             report = res.json().get("data") or {}
             has_run = bool(report.get("questions"))
@@ -215,8 +221,7 @@ class Smoke:
             self.check("eval/results 200", False, f"HTTP {res.status_code}")
 
         # 11. audit-logs ----------------------------------------------------
-        res = self.client.get("/api/v1/admin/audit-logs",
-                              headers={"Authorization": f"Bearer {self.tokens['admin']}"})
+        res = self._role_get("admin", "/api/v1/admin/audit-logs")
         logs = res.json().get("data", {}).get("audit_logs", []) if res.status_code == 200 else []
         has_login = any(e.get("action") == "LOGIN" for e in logs)
         self.check("audit-logs contain LOGIN entries",

@@ -46,7 +46,9 @@ def login(client, creds) -> dict:
     email, password = creds
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
-    return {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    # v0.10: the token arrives as an httpOnly cookie — read it
+    # from the TestClient cookie jar, not from the JSON body.
+    return {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
 
 
 def register(client, email, password="Pass1234", name="Test User", confirm=None):
@@ -67,7 +69,10 @@ def test_valid_register_returns_201_and_auto_login(client):
     body = res.json()
     assert body["success"] is True
     data = body["data"]
-    assert data["access_token"] and data["refresh_token"]
+    # v0.10: no tokens in the JSON body — they arrive as
+    # httpOnly cookies (Set-Cookie), which the client jar holds.
+    assert "access_token" not in data and "refresh_token" not in data
+    assert client.cookies.get("rtb_access") and client.cookies.get("rtb_refresh")
     assert data["user"]["email"] == "newuser@rtb.local"
     assert data["user"]["name"] == "Test User"
 
@@ -154,7 +159,9 @@ def test_admin_role_change_works_and_audit_logged(client):
     assert res.status_code == 200, res.text
     assert res.json()["data"]["user"]["role"] == "COMPLIANCE_OFFICER"
     assert res.json()["data"]["user"]["departments"] == ["COMPLIANCE", "RETAIL"]
-    # Audit log has the ROLE_CHANGED entry.
+    # Audit log has the ROLE_CHANGED entry. The target2 login above
+    # replaced the cookie jar, so log back in as admin first.
+    headers = login(client, ADMIN)
     logs = client.get("/api/v1/admin/audit-logs?limit=500", headers=headers).json()["data"]
     entries = [e for e in logs["audit_logs"]
                if e["action"] == "ROLE_CHANGED" and "target2@rtb.local" in (e["detail"] or "")]

@@ -5,7 +5,7 @@
 // links is not the enforcement).
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { api, getStoredUser, logout, roleLabel, type HealthResponse, type User } from './api/client'
+import { api, clearStoredUser, getStoredUser, logout, roleLabel, type HealthResponse, type User } from './api/client'
 import { ToastProvider } from './components/Toast'
 import EvalDashboard from './components/EvalDashboard'
 import Landing from './pages/Landing'
@@ -226,6 +226,34 @@ export default function App() {
   useEffect(() => {
     setUser(getStoredUser())
   }, [location.pathname])
+
+  // v0.10 (httpOnly cookies): the stored user is display-only — the
+  // real session lives in the cookie. Verify it against /auth/me on
+  // load: if the cookie is gone/expired the backend 401s and we drop
+  // the stale local user instead of showing a logged-in shell that
+  // every API call rejects.
+  useEffect(() => {
+    let cancelled = false
+    if (!getStoredUser()) return
+    api
+      .me()
+      .then((res) => {
+        if (!cancelled && res.data?.user) setUser(res.data.user)
+      })
+      .catch((err: unknown) => {
+        // Only an auth failure clears the session — a network error
+        // (API offline) must not log the user out. Clear the stored
+        // user too, or the next render would resurrect it from
+        // localStorage (currentUser = user ?? getStoredUser()).
+        if (!cancelled && err instanceof Error && err.message === 'UNAUTHORIZED') {
+          clearStoredUser()
+          setUser(null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function onLogout() {
     await logout()

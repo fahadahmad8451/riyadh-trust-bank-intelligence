@@ -68,5 +68,24 @@ def revoke_refresh_token(jti: str) -> None:
     _write("denylist", denied)
 
 
+def revoke_user_refresh_tokens(email: str) -> int:
+    """Revoke EVERY refresh token of one user (v0.10: called when an
+    admin resets that user's password, so old sessions die with the
+    old password). Returns the number revoked."""
+    email = (email or "").strip().lower()
+    data = _prune(_read("refresh"))
+    doomed = [jti for jti, rec in data.items()
+              if (rec.get("email") or "").lower() == email]
+    if not doomed:
+        return 0
+    denied = _read("denylist")
+    for jti in doomed:
+        denied[jti] = data.pop(jti)
+    _write("refresh", data)
+    _write("denylist", denied)
+    logger.info("Revoked %d refresh token(s) for %s", len(doomed), email)
+    return len(doomed)
+
+
 def is_denied(jti: str) -> bool:
     return jti in _read("denylist")

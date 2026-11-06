@@ -11,7 +11,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -23,8 +22,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 ALGORITHM = "HS256"
 REFRESH_EXPIRE_HOURS = 24
 
-_bearer = HTTPBearer(auto_error=False)
-
 if "CHANGE-ME" in settings.secret_key or settings.secret_key == "change-me":
     logger.warning(
         "JWT secret is the dev default — set a long random SECRET_KEY in .env "
@@ -34,6 +31,21 @@ if "CHANGE-ME" in settings.secret_key or settings.secret_key == "change-me":
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def validate_password(password: str) -> str | None:
+    """Password rule, shared by register and the admin password
+    reset (v0.10): at least 8 characters, at least one letter and
+    at least one digit. Returns the user-facing error, or None."""
+    import re
+
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if not re.search(r"[A-Za-z]", password):
+        return "Password must contain at least one letter."
+    if not re.search(r"\d", password):
+        return "Password must contain at least one digit."
+    return None
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -92,12 +104,16 @@ def _client_ip(request: Request | None) -> str | None:
 async def get_current_user(request: Request):
     """Auth dependency for protected routes. Raises 401 (never 403)
     when the token is missing, expired, of the wrong type, or the user
-    no longer exists in the store. Failed attempts are audit-logged."""
+    no longer exists in the store. Failed attempts are audit-logged.
+
+    v0.10: the token comes from the httpOnly `rtb_access` cookie
+    first (the browser path — JavaScript never sees the token), with
+    an Authorization: Bearer fallback for API clients and scripts."""
     from app.core.audit import append_audit
+    from app.core.cookies import read_access_token
     from app.core.users import get_user
 
-    credentials = await _bearer(request)
-    token = credentials.credentials if credentials else None
+    token = read_access_token(request)
     if not token:
         append_audit("AUTH_FAILED", result="fail", resource=request.url.path,
                      detail="no token", ip=_client_ip(request))

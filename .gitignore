@@ -51,3 +51,7 @@ data/archives/
 rtb-venv/
 .venv-sprint1/
 .venv-sprint3/
+
+# Patched-Arabic-font cache (derived from system Noto fonts, rebuilt by
+# scripts/generate_docs.py).
+scripts/.fontcache/

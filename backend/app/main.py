@@ -86,23 +86,51 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def csrf_origin_check(request: Request, call_next):
+    """CSRF defence-in-depth (v0.10, httpOnly cookies): a request
+    that carries the `rtb_access` cookie AND an Origin header must
+    come from one of the configured CORS origins, or it is a
+    cross-site form/post and is refused with 403. Requests without
+    an Origin header (curl, scripts, same-origin fetch) are allowed
+    — SameSite=Lax on the cookie already blocks cross-site cookie
+    sends from browsers, and this check is the second layer. GET /
+    HEAD are never state-changing and are never checked."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin")
+        if origin and request.cookies.get("rtb_access"):
+            allowed = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+            if origin not in allowed:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "success": False, "data": None,
+                        "error": "Forbidden — cross-site request origin not allowed.",
+                        "request_id": "csrf",
+                    },
+                )
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def record_metrics_middleware(request: Request, call_next):
     """Monitoring (v0.9): record every request (endpoint, method,
     status, latency, role) into metrics.jsonl. Best-effort only — a
     monitoring failure must never break the request itself. The role
-    comes from the access token when present; public requests have
-    role None. Runs OUTSIDE add_request_id so the latency measured
-    here covers the whole request."""
+    comes from the access token when present (httpOnly cookie first,
+    then the Bearer header); public requests have role None. Runs
+    OUTSIDE add_request_id so the latency measured here covers the
+    whole request."""
     started = time.time()
     response = await call_next(request)
     try:
+        from app.core.cookies import read_access_token
         from app.core.monitoring import record_request
         from app.core.security import decode_access_token
 
         role = None
-        auth_header = request.headers.get("authorization", "")
-        if auth_header.lower().startswith("bearer "):
-            payload = decode_access_token(auth_header[7:].strip())
+        token = read_access_token(request)
+        if token:
+            payload = decode_access_token(token)
             if payload:
                 role = payload.get("role")
         record_request(

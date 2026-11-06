@@ -1,13 +1,17 @@
 // Real API client — talks to FastAPI at /api/v1 (proxied by Vite in dev).
-// Sprint 3: JWT auth. The access token lives in localStorage (demo
-// setup — a production deployment should use an httpOnly cookie, see
-// docs/SPRINT3.md). Every protected call sends Authorization: Bearer.
+// v0.10: httpOnly cookie auth. The access + refresh tokens live in
+// HttpOnly cookies set by the backend — JavaScript NEVER sees them,
+// so nothing token-like is stored in localStorage (only the user's
+// display info, for the sidebar/topbar). Every fetch sends
+// credentials: 'include' so the browser attaches the cookies, and
+// the 401 path retries once via POST /auth/refresh (cookie-based).
 // No fake data: every function performs a real fetch and surfaces errors.
 //
 // Staging (v0.6): when built with --mode staging, VITE_API_URL points
 // at the staging API (http://127.0.0.1:8001) and the browser calls it
-// directly (CORS allows localhost:3001). In dev it is empty, so calls
-// stay relative (/api/...) and go through the Vite dev proxy as before.
+// directly (CORS allows localhost:3001, allow_credentials=True). In
+// dev it is empty, so calls stay relative (/api/...) and go through
+// the Vite dev proxy as before.
 const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/$/, '')
 function url(path: string): string {
   return `${API_BASE}${path}`
@@ -250,8 +254,7 @@ export function rolesForDepartment(department: string): string[] {
 export interface LoginResponse {
   success: boolean
   data: {
-    access_token: string
-    refresh_token: string
+    // v0.10: no tokens in the body — they arrive as httpOnly cookies.
     token_type: string
     expires_in_minutes: number
     user: User
@@ -260,13 +263,10 @@ export interface LoginResponse {
   request_id: string
 }
 
-const ACCESS_KEY = 'rtb_access_token'
-const REFRESH_KEY = 'rtb_refresh_token'
+// v0.10: only the user's display info is stored locally (for the
+// sidebar/topbar). Tokens live in httpOnly cookies and are never
+// readable or writable from JavaScript.
 const USER_KEY = 'rtb_user'
-
-export function getAccessToken(): string | null {
-  return localStorage.getItem(ACCESS_KEY)
-}
 
 export function getStoredUser(): User | null {
   try {
@@ -278,32 +278,28 @@ export function getStoredUser(): User | null {
 }
 
 export function isLoggedIn(): boolean {
-  return getAccessToken() !== null
+  return getStoredUser() !== null
 }
 
-export function storeSession(data: LoginResponse['data']): void {
-  if (!data) return
-  localStorage.setItem(ACCESS_KEY, data.access_token)
-  localStorage.setItem(REFRESH_KEY, data.refresh_token)
-  localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+export function storeUser(user: User | null | undefined): void {
+  if (!user) return
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+}
+
+export function clearStoredUser(): void {
+  localStorage.removeItem(USER_KEY)
 }
 
 export async function logout(): Promise<void> {
-  const refresh = localStorage.getItem(REFRESH_KEY)
-  if (refresh) {
-    try {
-      await fetch(url('/api/v1/auth/logout'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: refresh }),
-      })
-    } catch {
-      // Backend unreachable — still clear local session below.
-    }
+  try {
+    await fetch(url('/api/v1/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    // Backend unreachable — still clear local session below.
   }
-  localStorage.removeItem(ACCESS_KEY)
-  localStorage.removeItem(REFRESH_KEY)
-  localStorage.removeItem(USER_KEY)
+  clearStoredUser()
 }
 
 // The API envelope carries a plain-English `error` string — surface
@@ -323,15 +319,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     Accept: 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
   }
-  const token = getAccessToken()
-  if (token) headers.Authorization = `Bearer ${token}`
-  const res = await fetch(url(path), { ...init, headers })
+  // v0.10: cookies carry the session (credentials: 'include'); no
+  // Authorization header is ever set from JavaScript.
+  const res = await fetch(url(path), { ...init, headers, credentials: 'include' })
   if (res.status === 401) {
     // Token expired/invalid — try one refresh, then give up.
     const refreshed = await tryRefresh()
     if (refreshed) {
-      const retryHeaders = { ...headers, Authorization: `Bearer ${getAccessToken() ?? ''}` }
-      const retry = await fetch(url(path), { ...init, headers: retryHeaders })
+      const retry = await fetch(url(path), { ...init, headers, credentials: 'include' })
       if (!retry.ok) throw new Error(extractApiError(retry.status, await retry.text()))
       return (await retry.json()) as T
     }
@@ -344,17 +339,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 async function tryRefresh(): Promise<boolean> {
-  const refresh = localStorage.getItem(REFRESH_KEY)
-  if (!refresh) return false
+  // v0.10: the refresh token travels in its httpOnly cookie — no
+  // body is needed. On success the response carries the user; store
+  // it so the shell (name/role) stays in sync.
   try {
     const res = await fetch(url('/api/v1/auth/refresh'), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refresh }),
+      credentials: 'include',
     })
     if (!res.ok) return false
     const body = (await res.json()) as LoginResponse
-    storeSession(body.data)
+    storeUser(body.data?.user)
     return true
   } catch {
     return false
@@ -373,6 +368,15 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
   { email: 'service@rtb.local', password: 'Service123!', label: 'Customer Service (sirf Retail)' },
 ]
 
+export interface PasswordResetRequestRow {
+  id: string
+  email: string
+  status: 'pending' | 'resolved' | 'dismissed'
+  requested_at: string
+  resolved_by: string | null
+  resolved_at: string | null
+}
+
 export const api = {
   health: () => request<HealthResponse>('/api/v1/health'),
   metrics: () => request<MetricsResponse>('/api/v1/metrics'),
@@ -380,11 +384,12 @@ export const api = {
     const res = await fetch(url('/api/v1/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password }),
     })
     const body = (await res.json()) as LoginResponse
     if (!res.ok) throw new Error(body.error ?? `Login failed (${res.status})`)
-    storeSession(body.data)
+    storeUser(body.data?.user)
     return body
   },
   me: () => request<{ success: boolean; data: { user: User } }>('/api/v1/auth/me'),
@@ -399,6 +404,7 @@ export const api = {
     const res = await fetch(url('/api/v1/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         full_name: fullName,
         email,
@@ -408,7 +414,7 @@ export const api = {
     })
     const body = (await res.json()) as LoginResponse
     if (!res.ok) throw new Error(body.error ?? `Registration failed (${res.status})`)
-    storeSession(body.data)
+    storeUser(body.data?.user)
     return body
   },
   chat: async (question: string, conversationId?: string): Promise<ChatResponse> => {
@@ -455,6 +461,32 @@ export const api = {
   evalRun: (limit?: number) =>
     request<{ success: boolean; data: EvalReport }>(
       limit ? `/api/v1/eval/run?limit=${limit}` : '/api/v1/eval/run',
+    ),
+  // v0.10: password reset (no email exists, so the flow is a
+  // request the admin approves by setting a new temporary password).
+  forgotPassword: (email: string) =>
+    request<{ success: boolean; data: { message: string } }>('/api/v1/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }),
+  passwordResetRequests: (status?: string) =>
+    request<{ success: boolean; data: { requests: PasswordResetRequestRow[]; count: number } }>(
+      status ? `/api/v1/admin/password-reset-requests?status=${status}` : '/api/v1/admin/password-reset-requests',
+    ),
+  resetUserPassword: (email: string, newPassword: string, confirmPassword: string) =>
+    request<{ success: boolean; data: { user: User } }>(
+      `/api/v1/admin/users/${encodeURIComponent(email)}/reset-password`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_password: newPassword, confirm_password: confirmPassword }),
+      },
+    ),
+  dismissPasswordResetRequest: (id: string) =>
+    request<{ success: boolean; data: { request: PasswordResetRequestRow } }>(
+      `/api/v1/admin/password-reset-requests/${encodeURIComponent(id)}/dismiss`,
+      { method: 'POST' },
     ),
   adminUsers: () =>
     request<{ success: boolean; data: { users: User[]; count: number } }>('/api/v1/admin/users'),

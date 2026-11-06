@@ -59,7 +59,7 @@ def login(client, who: str) -> dict:
     email, password = USERS[who]
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
-    token = res.json()["data"]["access_token"]
+    token = client.cookies.get("rtb_access")  # v0.10: httpOnly cookie
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -77,15 +77,18 @@ def cited_departments(data: dict) -> set:
 # 1-4. Authentication: 401s
 # ---------------------------------------------------------------------------
 def test_unauthenticated_chat_is_401(client):
+    client.cookies.clear()
     res = client.post("/api/v1/chat", json={"question": KYC_Q})
     assert res.status_code == 401
 
 
 def test_unauthenticated_documents_is_401(client):
+    client.cookies.clear()
     assert client.get("/api/v1/documents").status_code == 401
 
 
 def test_unauthenticated_admin_is_401(client):
+    client.cookies.clear()
     assert client.get("/api/v1/admin/users").status_code == 401
     assert client.get("/api/v1/admin/audit-logs").status_code == 401
 
@@ -106,6 +109,8 @@ def test_unknown_email_is_401(client):
 def test_expired_token_is_401(client):
     from app.core.security import create_access_token
 
+    client.cookies.clear()  # present ONLY the expired Bearer token
+
     expired = create_access_token("admin@rtb.local", "ADMIN", expires_minutes=-1)
     res = client.post("/api/v1/chat", json={"question": KYC_Q},
                       headers={"Authorization": f"Bearer {expired}"})
@@ -115,7 +120,11 @@ def test_expired_token_is_401(client):
 def test_refresh_token_cannot_be_used_as_access_token(client):
     res = client.post("/api/v1/auth/login",
                       json={"email": USERS["admin"][0], "password": USERS["admin"][1]})
-    refresh = res.json()["data"]["refresh_token"]
+    refresh = client.cookies.get("rtb_refresh")  # v0.10: httpOnly cookie
+    # Clear the jar: the chat call must present ONLY the refresh
+    # token as a Bearer token (otherwise the login's access cookie
+    # in the jar would authenticate the request on its own).
+    client.cookies.clear()
     res = client.post("/api/v1/chat", json={"question": KYC_Q},
                       headers={"Authorization": f"Bearer {refresh}"})
     assert res.status_code == 401
@@ -136,10 +145,10 @@ def test_login_returns_user_with_departments(client):
 def test_refresh_and_logout_flow(client):
     res = client.post("/api/v1/auth/login",
                       json={"email": USERS["admin"][0], "password": USERS["admin"][1]})
-    refresh = res.json()["data"]["refresh_token"]
+    refresh = client.cookies.get("rtb_refresh")  # v0.10: httpOnly cookie
     res = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
     assert res.status_code == 200
-    new_refresh = res.json()["data"]["refresh_token"]
+    new_refresh = client.cookies.get("rtb_refresh")  # v0.10: rotated cookie
     assert new_refresh != refresh  # rotation: a fresh refresh token is issued
     assert client.post("/api/v1/auth/logout", json={"refresh_token": new_refresh}).status_code == 200
     # The revoked refresh token no longer works.
@@ -263,6 +272,9 @@ def test_audit_log_records_login_query_and_denials(client):
     # Make a query and a denied call, then check the log contains them.
     chat(client, headers, KYC_Q)
     client.get("/api/v1/admin/users", headers=login(client, "service"))
+    # The service login replaced the cookie jar — log back in as admin
+    # so the audit-log read is authenticated as admin.
+    headers = login(client, "admin")
     logs = client.get("/api/v1/admin/audit-logs?limit=500", headers=headers).json()["data"]
     actions = [e["action"] for e in logs["audit_logs"]]
     assert "LOGIN" in actions

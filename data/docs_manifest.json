@@ -8,7 +8,7 @@
       "department": "RETAIL",
       "version": "1.0",
       "language": "en",
-      "file_path": "/home/hatch/workspace/projects/riyadh-trust-bank-intelligence/data/docs/01-kyc-policy.pdf",
+      "file_path": "../data/docs/01-kyc-policy.pdf",
       "chunk_count": 2,
       "pages": 3
     },
@@ -22,7 +22,7 @@
       "language": "en",
       "file_path": "../data/docs/02-aml-policy.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "03-sama-compliance-summary.pdf",
@@ -34,7 +34,7 @@
       "language": "en",
       "file_path": "../data/docs/03-sama-compliance-summary.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "04-personal-loan-policy.pdf",
@@ -46,7 +46,7 @@
       "language": "en",
       "file_path": "../data/docs/04-personal-loan-policy.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "05-account-opening-policy.pdf",
@@ -58,7 +58,7 @@
       "language": "en",
       "file_path": "../data/docs/05-account-opening-policy.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "06-hr-leave-policy.pdf",
@@ -70,7 +70,7 @@
       "language": "en",
       "file_path": "../data/docs/06-hr-leave-policy.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "07-charges-fees-schedule.pdf",
@@ -82,7 +82,7 @@
       "language": "en",
       "file_path": "../data/docs/07-charges-fees-schedule.pdf",
       "chunk_count": 1,
-      "pages": 3
+      "pages": 2
     },
     {
       "document_id": "08-pdpl-privacy-summary.pdf",
@@ -94,7 +94,7 @@
       "language": "en",
       "file_path": "../data/docs/08-pdpl-privacy-summary.pdf",
       "chunk_count": 2,
-      "pages": 3
+      "pages": 2
     }
   ]
 }

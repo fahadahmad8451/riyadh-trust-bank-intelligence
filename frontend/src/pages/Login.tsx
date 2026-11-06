@@ -1,7 +1,9 @@
 // Sign In ("/login") — real POST /api/v1/auth/login. Backend 401
 // messages are shown as-is. Demo accounts: one click fills the form
-// AND signs in. "Forgot password?" is honest: there is no reset flow
-// yet, so it says so instead of faking one.
+// AND signs in. "Forgot password?" (v0.10) opens the real request
+// form: the request is recorded for the admin, who sets a new
+// temporary password (there is no email in this system, so nothing
+// is emailed — the admin hands the new password to the user).
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, DEMO_ACCOUNTS } from '../api/client'
@@ -16,7 +18,11 @@ export default function Login() {
   const [rememberMe, setRememberMe] = useState(() => localStorage.getItem(REMEMBER_KEY) !== null)
   const [error, setError] = useState<string | null>(null)
   const [fieldError, setFieldError] = useState<string | null>(null)
-  const [forgotNote, setForgotNote] = useState(false)
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotBusy, setForgotBusy] = useState(false)
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null)
+  const [forgotError, setForgotError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Production (v0.8): demo accounts are OFF in production
   // (RTB_DEMO_ACCOUNTS=0) — the backend reports it on /health, and
@@ -124,15 +130,62 @@ export default function Login() {
           <button
             type="button"
             className="font-medium text-navy-700 hover:underline"
-            onClick={() => setForgotNote((v) => !v)}
+            onClick={() => {
+              setForgotOpen((v) => !v)
+              setForgotEmail(email)
+              setForgotMessage(null)
+              setForgotError(null)
+            }}
           >
             Forgot password?
           </button>
         </div>
-        {forgotNote && (
-          <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800" role="status">
-            Password reset is not available yet. Please contact the bank admin to reset your password.
-          </p>
+        {forgotOpen && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3" role="status">
+            <p className="text-sm text-amber-800">
+              Enter your email and the admin will set a new temporary password for you. There is
+              no email in this system — the admin will give you the new password directly.
+            </p>
+            <form
+              className="mt-2 flex gap-2"
+              onSubmit={async (e) => {
+                e.preventDefault()
+                if (!forgotEmail.trim()) {
+                  setForgotError('Please enter your email address.')
+                  return
+                }
+                setForgotBusy(true)
+                setForgotError(null)
+                setForgotMessage(null)
+                try {
+                  const res = await api.forgotPassword(forgotEmail.trim())
+                  setForgotMessage(res.data?.message ?? 'Your request has been recorded.')
+                } catch (err) {
+                  setForgotError(err instanceof Error ? err.message : 'Request failed.')
+                } finally {
+                  setForgotBusy(false)
+                }
+              }}
+            >
+              <input
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-200"
+                type="email"
+                placeholder="you@rtb.local"
+                autoComplete="email"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={forgotBusy}
+                className="shrink-0 rounded-lg bg-navy-900 px-3 py-2 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-50"
+              >
+                {forgotBusy ? 'Sending…' : 'Request reset'}
+              </button>
+            </form>
+            {forgotMessage && <p className="mt-2 text-sm text-green-700">{forgotMessage}</p>}
+            {forgotError && <p className="mt-2 text-sm text-red-600">{forgotError}</p>}
+          </div>
         )}
 
         {fieldError && <p className="mt-3 text-sm text-red-600">{fieldError}</p>}

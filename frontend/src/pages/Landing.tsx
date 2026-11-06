@@ -108,7 +108,7 @@ export default function Landing() {
               </div>
             ))}
           </dl>
-          <p className="mt-10 text-xs text-slate-400">Build v0.9.1 — landing fix</p>
+          <p className="mt-10 text-xs text-slate-400">Build v0.10.0</p>
         </div>
       </section>
 
@@ -168,7 +168,7 @@ export default function Landing() {
             Demo deployment — synthetic documents only, no real customer data. Tokens are stored in
             the browser (demo setup).
           </p>
-          <p className="text-xs text-slate-400">v0.9.1</p>
+          <p className="text-xs text-slate-400">v0.10.0</p>
         </div>
       </footer>
     </div>

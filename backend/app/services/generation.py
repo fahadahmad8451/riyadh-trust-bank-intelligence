@@ -31,6 +31,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.retrieval import REFUSAL_THRESHOLD, detect_language
+from app.services.topic_gate import gated_department
 
 logger = logging.getLogger("rtb.generation")
 
@@ -58,17 +59,34 @@ def ollama_host() -> str:
     return (settings.ollama_host or "http://localhost:11434").rstrip("/")
 
 
+# v0.10: Ollama availability is cached for 10 s — answer_question()
+# calls ollama_available() on every chat, and an HTTP probe per chat
+# is pure overhead when Ollama is not there (or is there). The cache
+# is per-process and only affects WHICH generation mode is picked;
+# a stale 10 s entry cannot leak or invent anything.
+_OLLAMA_CACHE: dict = {"at": 0.0, "result": {"available": False, "models": []}}
+OLLAMA_CACHE_TTL_S = 10.0
+
+
 def ollama_available() -> dict:
-    """Probe Ollama. Returns {available, models}. Never raises."""
+    """Probe Ollama. Returns {available, models}. Never raises.
+    Result is cached for OLLAMA_CACHE_TTL_S (see above)."""
+    now = time.time()
+    if now - _OLLAMA_CACHE["at"] < OLLAMA_CACHE_TTL_S:
+        return _OLLAMA_CACHE["result"]
     try:
         res = httpx.get(f"{ollama_host()}/api/tags", timeout=3.0)
         if res.status_code != 200:
-            return {"available": False, "models": []}
-        models = [m.get("name") for m in res.json().get("models", [])]
-        return {"available": True, "models": models}
+            result = {"available": False, "models": []}
+        else:
+            models = [m.get("name") for m in res.json().get("models", [])]
+            result = {"available": True, "models": models}
     except Exception as exc:  # noqa: BLE001 — Ollama simply not there
         logger.info("Ollama not reachable (%s) — extractive fallback will be used", exc)
-        return {"available": False, "models": []}
+        result = {"available": False, "models": []}
+    _OLLAMA_CACHE["at"] = now
+    _OLLAMA_CACHE["result"] = result
+    return result
 
 
 def mask_pii(text: str) -> str:
@@ -187,8 +205,17 @@ def _rbac_blocked_department(question: str, retriever, allowed_departments: list
     open to the normal refusal/answer path, never to a leak).
     """
     try:
+        # v0.10: the probe uses the SCORE reranker (rerank_mode="score")
+        # — it only needs a top-1 comparison, and a cross-encoder
+        # predict costs ~3s on this RAM-starved VM (profiled 2026-11-06:
+        # rerank 3.2-4.7s of a 4.6-9.7s EN chat). The probe thresholds
+        # already have a score-based branch (strong >= 0.015, weak =
+        # allowed below half of unrestricted), so this is a supported
+        # mode, not a shortcut. The real answer still uses the
+        # cross-encoder.
         unrestricted = retriever.retrieve(question, top_k=1,
-                                         allowed_departments=None)
+                                         allowed_departments=None,
+                                         rerank_mode="score")
     except Exception as exc:  # noqa: BLE001 — probe is best-effort
         logger.info("Unrestricted RBAC probe failed (%s) — skipping", exc)
         return None
@@ -258,6 +285,37 @@ def answer_question(question: str, retriever=None, top_k: int = 5,
             "ollama": {"available": False, "models": []},
         }
     retriever = retriever or get_retriever()
+
+    # v0.10 — deterministic topic gate (BEFORE any retrieval): if the
+    # question is about a department this role may NOT see (AML for
+    # Service, HR for Service/Compliance, PDPL for non-admin), refuse
+    # immediately with no retrieval at all. The score-based probe
+    # below stays as a fallback for phrasings the keyword map does
+    # not cover — but the gate is what guarantees the reported case
+    # ("AML policy for high-risk customers?" as Service) is refused
+    # instead of answered from RETAIL chunks that share its words.
+    if allowed_departments is not None:
+        gated = gated_department(question, allowed_departments)
+        if gated is not None:
+            rbac_answer = RBAC_REFUSAL_AR if language == "ar" else RBAC_REFUSAL_EN
+            return {
+                "answer": rbac_answer,
+                "citations": [],
+                "retrieval_scores": {
+                    "blocked_department": gated,
+                    "topic_gate": True,
+                },
+                "latency_ms": round((time.time() - started) * 1000, 1),
+                "generation_mode": "rbac-refusal",
+                "language": language,
+                "retrieved_count": 0,
+                "refused": True,
+                "rbac_blocked": True,
+                "topic_gate": True,
+                "blocked_department": gated,
+                "ollama": {"available": False, "models": []},
+            }
+
     result = retriever.retrieve(question, top_k=top_k,
                                 allowed_departments=allowed_departments)
     reranked = result["reranked"]

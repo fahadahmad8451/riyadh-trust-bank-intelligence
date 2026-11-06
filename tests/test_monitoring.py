@@ -72,7 +72,7 @@ def _clear_monitoring_files(isolated_env):
 def _login(client, email, password):
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
-    return {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    return {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
 
 
 def _metric_entries(isolated_env, name="metrics.jsonl"):
@@ -143,12 +143,15 @@ def test_metrics_forbidden_for_non_admin(client):
         "full_name": "Service User", "email": "mon-service@rtb.local",
         "password": "Pass1234", "confirm_password": "Pass1234"})
     assert res.status_code == 201, res.text
-    headers = {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    headers = {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
     res = client.get("/api/v1/admin/metrics", headers=headers)
     assert res.status_code == 403, res.text
 
 
 def test_metrics_unauthenticated_401(client):
+    # v0.10: clear the cookie jar first — an earlier test's login
+    # cookie would otherwise authenticate this call on its own.
+    client.cookies.clear()
     res = client.get("/api/v1/admin/metrics")
     assert res.status_code == 401, res.text
 
@@ -198,7 +201,7 @@ def test_alerts_forbidden_for_non_admin(client):
         "full_name": "Service Two", "email": "mon-service2@rtb.local",
         "password": "Pass1234", "confirm_password": "Pass1234"})
     assert res.status_code == 201, res.text
-    headers = {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    headers = {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
     assert client.get("/api/v1/admin/alerts", headers=headers).status_code == 403
 
 

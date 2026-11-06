@@ -141,7 +141,7 @@ def _admin_headers(client):
     res = client.post("/api/v1/auth/login",
                       json={"email": "admin@rtb.local", "password": "Admin123!"})
     assert res.status_code == 200, res.text
-    return {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    return {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
 
 
 def test_documents_api_lists_manifest(tmp_path, monkeypatch):

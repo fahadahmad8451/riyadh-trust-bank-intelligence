@@ -166,7 +166,7 @@ def test_register_rate_limit_429(client):
 def test_upload_over_10mb_is_413(client):
     res = login(client, ADMIN[0], ADMIN[1])
     assert res.status_code == 200, res.text
-    headers = {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    headers = {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
     big = io.BytesIO(b"x" * (11 * 1024 * 1024))
     res = client.post("/api/v1/documents/upload",
                       files={"file": ("big.pdf", big, "application/pdf")},

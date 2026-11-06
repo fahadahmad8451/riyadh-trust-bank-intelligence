@@ -14,10 +14,22 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.core import refresh_tokens as rt
 from app.core.audit import append_audit, read_audit
+from app.core.password_reset import (
+    list_requests,
+    resolve_pending_for_email,
+    resolve_request,
+)
 from app.core.rbac import ALL_ROLES
-from app.core.security import require_admin
-from app.core.users import get_user, list_public_users, public_user, update_user_role
+from app.core.security import require_admin, validate_password
+from app.core.users import (
+    get_user,
+    list_public_users,
+    public_user,
+    update_password,
+    update_user_role,
+)
 
 router = APIRouter()
 
@@ -82,3 +94,70 @@ async def admin_audit_logs(
         "limit": limit,
         "offset": offset,
     })
+
+
+# ---------------------------------------------------------------------------
+# Password reset — v0.10 (no email/SMTP exists, so the flow is:
+# user requests -> admin sees it here -> admin sets a new temporary
+# password, which they give to the user out of band).
+# ---------------------------------------------------------------------------
+class ResetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=1, max_length=200)
+    confirm_password: str = Field(..., min_length=1, max_length=200)
+
+
+@router.get("/admin/password-reset-requests")
+async def admin_password_reset_requests(
+    request: Request,
+    status: str | None = Query(default=None, pattern="^(pending|resolved|dismissed)$"),
+    user: dict = Depends(require_admin),
+):
+    requests = list_requests(status)
+    return _envelope({"requests": requests, "count": len(requests)})
+
+
+@router.post("/admin/password-reset-requests/{request_id}/dismiss")
+async def admin_dismiss_reset_request(
+    request_id: str, request: Request, user: dict = Depends(require_admin),
+):
+    req = resolve_request(request_id, "dismissed", user["email"])
+    if req is None:
+        return _error(404, f"Reset request not found: {request_id}")
+    append_audit(
+        "PASSWORD_RESET_REQUEST_DISMISSED", user_email=req["email"],
+        role=user["role"], result="ok",
+        resource=f"/api/v1/admin/password-reset-requests/{request_id}/dismiss",
+        detail=f"request {request_id} dismissed by {user['email']}",
+        ip=request.client.host if request.client else None,
+    )
+    return _envelope({"request": req})
+
+
+@router.post("/admin/users/{email}/reset-password")
+async def admin_reset_password(
+    email: str, payload: ResetPasswordRequest, request: Request,
+    user: dict = Depends(require_admin),
+):
+    target_email = (email or "").strip().lower()
+    if payload.new_password != payload.confirm_password:
+        return _error(400, "Passwords do not match.")
+    pw_error = validate_password(payload.new_password)
+    if pw_error:
+        return _error(400, pw_error)
+    target = get_user(target_email)
+    if target is None:
+        return _error(404, f"User not found: {target_email}")
+    updated = update_password(target_email, payload.new_password)
+    # The old password must stop working everywhere: revoke every
+    # refresh token the user holds (their access token dies in 15
+    # minutes on its own — it is stateless and cannot be revoked).
+    revoked = rt.revoke_user_refresh_tokens(target_email)
+    resolved = resolve_pending_for_email(target_email, user["email"])
+    append_audit(
+        "PASSWORD_RESET_BY_ADMIN", user_email=user["email"], role=user["role"],
+        result="ok", resource=f"/api/v1/admin/users/{target_email}/reset-password",
+        detail=f"password reset for {target_email} by admin "
+               f"({revoked} session(s) revoked, {resolved} pending request(s) resolved)",
+        ip=request.client.host if request.client else None,
+    )
+    return _envelope({"user": public_user(updated)})

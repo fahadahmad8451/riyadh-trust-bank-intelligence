@@ -103,6 +103,17 @@ async def chat(payload: ChatRequest, user: dict = Depends(get_current_user)):
         detail=f"q={payload.question[:80]!r} top_cited={top_cited} "
                f"refused={result['refused']}",
     )
+    if result.get("topic_gate"):
+        # v0.10: the deterministic topic gate refused this question —
+        # log the denial explicitly (the audit log is how an admin
+        # sees who was refused, and for which blocked department).
+        append_audit(
+            "RBAC_DENIED", user_email=user["email"], role=user["role"],
+            result="denied", resource=f"chat:{conversation_id}",
+            detail=f"q={payload.question[:80]!r} "
+                   f"blocked_department={result.get('blocked_department')} "
+                   f"(topic gate)",
+        )
     return _envelope({
         "conversation_id": conversation_id,
         "message_id": assistant_message_id,

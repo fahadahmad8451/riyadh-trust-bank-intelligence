@@ -68,7 +68,7 @@ def main() -> int:
         body = res.json().get("data", {}) if res.status_code == 200 else {}
         check("health environment=production", body.get("environment") == "production",
               f"got {body.get('environment')!r}")
-        check("health version 0.9.1", body.get("version") == "0.9.1",
+        check("health version 0.10.0", body.get("version") == "0.10.0",
               f"got {body.get('version')!r}")
         check("health demo_accounts_enabled=false",
               body.get("demo_accounts_enabled") is False,
@@ -107,20 +107,19 @@ def main() -> int:
         res = client.post("/api/v1/auth/login",
                           json={"email": smoke_email, "password": "Smoke1234"})
         check("login new user -> 200", res.status_code == 200, f"HTTP {res.status_code}")
-        token = res.json()["data"]["access_token"] if res.status_code == 200 else ""
-        headers = {"Authorization": f"Bearer {token}"}
+        # v0.10: the session lives in the httpOnly cookie jar — no
+        # token in the body, no Authorization header needed.
+        logged_in = res.status_code == 200
 
         # 9-10. Chat + RBAC --------------------------------------------------
-        if token:
+        if logged_in:
             res = client.post("/api/v1/chat",
-                              json={"question": "What documents do I need to open a personal account?"},
-                              headers=headers)
+                              json={"question": "What documents do I need to open a personal account?"})
             cited = res.json().get("data", {}).get("citations", []) if res.status_code == 200 else []
             check("EN chat answered + cited", res.status_code == 200 and len(cited) > 0,
                   f"HTTP {res.status_code}, {len(cited)} citations")
             res = client.post("/api/v1/chat",
-                              json={"question": "What is the AML reporting threshold?"},
-                              headers=headers)
+                              json={"question": "What is the AML reporting threshold?"})
             data = res.json().get("data", {}) if res.status_code == 200 else {}
             check("RBAC: service AML -> refused, 0 citations",
                   data.get("refused") is True

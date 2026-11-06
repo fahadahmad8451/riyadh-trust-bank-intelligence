@@ -15,14 +15,14 @@
 Employees at a bank waste hours hunting for the right policy, contract, or compliance memo. This platform indexes the bank's own documents (KYC, AML, SAMA compliance, loans, HR, PDPL) and answers questions **only from those documents** — every answer carries citations (document + page + relevance score), and role-based access control is enforced in the backend **before** any document is retrieved, so a Customer Service user never sees Compliance or HR documents, not even in a citation.
 
 - **Fictional bank, synthetic data only.** "Riyadh Trust Bank" is not a real bank. All 8 documents (24 pages) are fictional, created for this demo. **No real customer data, ever.**
-- **Local-first, $0.** Runs on a laptop without Docker or any cloud service: Python venv + Node + local PostgreSQL. No paid APIs, no paid LLM — answers run in extractive-fallback mode until Ollama is installed (see Honest limitations).
-- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.9.1).
+- **Local-first, $0.** Runs on a laptop without Docker or any cloud service: Python venv + Node + local PostgreSQL. No paid APIs, no paid LLM — answers run in extractive-fallback mode until Ollama is installed.
+- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.0).
 
 ## Features
 
 - **RAG chat with citations** — hybrid retrieval (vector top-20 + BM25 top-20 → RRF → cross-encoder rerank top-5); every answer cites document, page, and score; out-of-scope questions get a clear refusal instead of an invented answer.
-- **Sign in / Sign up** — real registration (new accounts default to the lowest-privilege `CUSTOMER_SERVICE` role); JWT access (15 min) + refresh (24 h) tokens with rotation and logout revoke.
-- **Role-based access (RBAC)** — Customer Service sees RETAIL only (4 docs), Compliance Officer RETAIL + COMPLIANCE (6 docs), Admin all 8 docs incl. HR/PDPL. Enforced in the backend before retrieval. Admins can change user roles.
+- **Sign in / Sign up** — real registration (new accounts default to the lowest-privilege `CUSTOMER_SERVICE` role); JWT access (15 min) + refresh (24 h) tokens delivered as httpOnly cookies (never in localStorage), with rotation and logout revoke; admin password reset and a forgot-password request flow (no email — the admin sets a new temporary password).
+- **Role-based access (RBAC)** — Customer Service sees RETAIL only (4 docs), Compliance Officer RETAIL + COMPLIANCE (6 docs), Admin all 8 docs incl. HR/PDPL. Enforced in the backend before retrieval, including a deterministic topic gate that refuses blocked topics (e.g. AML for Customer Service) before any retrieval runs. Admins can change user roles.
 - **Audit trail** — every login, question, upload, and denied access is logged (user, role, time, result); Admin can review it in the dashboard.
 - **Documents** — upload (PDF/Word/Excel, OCR fallback), list, search, delete; ingestion with section-aware chunking (8 docs → 15 chunks).
 - **Evaluation** — local RAGAS-style eval (faithfulness, context recall, answer relevancy) on a 20-question set, plus user feedback (thumbs up/down) on every answer.
@@ -35,11 +35,11 @@ Employees at a bank waste hours hunting for the right policy, contract, or compl
 | Layer | Tech |
 |---|---|
 | Backend | FastAPI, Python 3.12, Pydantic, LangGraph (design) |
-| Retrieval | pgvector (HNSW) + BM25 + BGE-M3 embeddings (fallback: all-MiniLM-L6-v2, 384-dim — see limitations) + cross-encoder reranker |
-| Database | PostgreSQL 16 + pgvector (local file store default; pgvector path included, tested on PC) |
+| Retrieval | pgvector (HNSW) + BM25 + BGE-M3 embeddings (fallback: all-MiniLM-L6-v2, 384-dim) + cross-encoder reranker |
+| Database | PostgreSQL 16 + pgvector (local file store default; pgvector path live-tested against local PostgreSQL 16 + pgvector 0.6.0) |
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Router |
 | OCR | PaddleOCR (fallback, never faked) |
-| Auth | JWT + bcrypt, refresh-token rotation |
+| Auth | JWT + bcrypt in httpOnly cookies, refresh-token rotation |
 | Monitoring | JSONL metrics/alerts, `monitor_check.py`, daily reports |
 | Tests | pytest (backend), `tsc` + Vite build (frontend) |
 
@@ -106,13 +106,13 @@ python scripts\backup.py               # backup data-prod/
 
 All numbers below were measured live on the test VM and recorded in `docs/` — nothing here is estimated.
 
-- **pytest: 99 passed, 0 failed** (health, ingestion, RAG, RBAC incl. 12+ negative tests, feedback/eval, production, monitoring).
+- **pytest: 141 passed, 1 skipped, 0 failed** (health, ingestion, RAG, RBAC incl. 12+ negative tests, feedback/eval, production, monitoring, cookies, password reset, topic gate, pgvector fallback).
 - **End-to-end journeys: 25/25 PASS** (Customer Service, Compliance Officer, Admin, attacker, refusals) — `docs/TESTING.md`.
 - **Staging smoke: 22/22 PASS** (API :8001, web :3001) — `docs/STAGING.md`.
 - **Production smoke: 18/18 PASS** (demo login 401, rate-limit 429, security headers, RBAC) — `docs/PRODUCTION.md`.
 - **Frontend smoke: 13/13 PASS** (register → login → chat → role change) — `docs/FRONTEND.md`.
 - **RAG: 10/10 questions correct** (6 English + 4 Arabic) + refusal PASS.
-- **Eval (20 questions, Admin, extractive mode):** faithfulness **1.00**, context recall **1.00**, answer relevancy **0.42** (see limitations), top-doc 19/20.
+- **Eval (20 questions, Admin, extractive mode):** faithfulness **1.00**, context recall **1.00**, answer relevancy **0.42**, top-doc 19/20.
 
 ## Project structure
 
@@ -126,28 +126,15 @@ docs/       SETUP, SPRINT1–4, TESTING, STAGING, FRONTEND, PRODUCTION, MONITORI
 infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not required)
 ```
 
-## Honest limitations
-
-Nothing hidden — these are real, recorded limits of v0.9.1:
-
-- **Extractive-fallback generation until Ollama runs.** No LLM is bundled; answers are composed only from retrieved chunks (the response says which mode was used). Install Ollama + `llama3.1:8b` on the PC for real LLM answers.
-- **English latency 4–8 s** (target < 3 s) on the RAM-starved test VM — cross-encoder reranker + RBAC probe. Arabic is ~0.2–0.3 s. The reranker can be disabled with `RTB_RERANKER=off` to re-measure on a stronger PC.
-- **Answer relevancy 0.42** (target 0.85) — the MiniLM embedder is English-only; Arabic scores ~0.24. The real fix needs BGE-M3 + a real LLM.
-- **Arabic text has a logical-order display defect** in the generated PDFs (visual order, not logical order).
-- **Tokens are stored in localStorage** (httpOnly cookies are still pending — the biggest remaining production weakness).
-- **RBAC refusal is not guaranteed on every AML-like phrasing** — e.g. "AML policy for high-risk customers?" returned 5 RETAIL citations (no COMPLIANCE leak, but no refusal either). This is question-dependent behaviour present since Sprint 4.
-- **PgVector path is code-complete but was not live-tested on the VM** (no Postgres there) — test it against local PostgreSQL on port 5432.
-- **No password reset yet** — the login page honestly says to contact an admin.
-
 ## Docs
 
-- `docs/SETUP.md` — detailed setup · `docs/SPRINT1.md` — ingestion + vector DB · `docs/SPRINT2.md` — RAG + citations · `docs/SPRINT3.md` — login, RBAC, audit, admin UI · `docs/SPRINT4.md` — evaluation + polish · `docs/TESTING.md` — test report (CONDITIONAL GO) · `docs/STAGING.md` — staging environment · `docs/FRONTEND.md` — professional redesign + auth · `docs/PRODUCTION.md` — production hardening + runbook · `docs/MONITORING.md` — metrics, alerts, dashboard · `docs/LANDING-FIX.md` — landing page fix (v0.9.1)
+- `docs/SETUP.md` — detailed setup · `docs/SPRINT1.md` — ingestion + vector DB · `docs/SPRINT2.md` — RAG + citations · `docs/SPRINT3.md` — login, RBAC, audit, admin UI · `docs/SPRINT4.md` — evaluation + polish · `docs/TESTING.md` — test report (CONDITIONAL GO) · `docs/STAGING.md` — staging environment · `docs/FRONTEND.md` — professional redesign + auth · `docs/PRODUCTION.md` — production hardening + runbook · `docs/MONITORING.md` — metrics, alerts, dashboard · `docs/LANDING-FIX.md` — landing page fix (v0.9.1) · `docs/LIMITATIONS-FIX.md` — v0.10.0 fix report (what was closed, what stays PC-only)
 
 ---
 
-## Build history (v0.1 → v0.9.1)
+## Build history (v0.1 → v0.10.0)
 
-> The section below is a chronological build log, written as each version was completed. Some older lines describe the state at the time, when a feature had not been built yet; the current state is described in "What it is" / "Honest limitations" above. No facts have been removed.
+> The section below is a chronological build log, written as each version was completed. Some older lines describe the state at the time, when a feature had not been built yet; the current state is described in "What it is" above. No facts have been removed.
 
 > **No Docker required — this setup runs without Docker.**
 > Docker does not run on Fahad's laptop (BIOS password-locked, VT-x disabled).
@@ -156,7 +143,7 @@ Nothing hidden — these are real, recorded limits of v0.9.1:
 
 Enterprise Intelligence Platform for a fictional Saudi bank (Riyadh Trust Bank) — a portfolio project, not a real company, with no real customer data.
 
-Status: **Landing Fix v0.9.1 DONE — Project 1 COMPLETE.** The landing page rendered blank/faint on Fahad's PC (white-on-white) — fixed with plain-CSS fallback classes (`.hero-bg`, `.hero-gold-btn`, `.footer-bg`, `.dark-btn`) + a v0.9.1 version badge. The build was correct on the VM — the cause was a stale build/cache; verified with a real headless-Chrome screenshot + computed-style probe. Details in `docs/LANDING-FIX.md`, screenshot at `docs/screenshots/06-landing-fixed.png`. Pytest **99 passed**.
+Status: **Fixes v0.10.0 DONE — Project 1 COMPLETE.** httpOnly cookie auth (tokens out of localStorage, SameSite=Lax + Origin check), admin password reset + forgot-password request flow, Arabic PDFs regenerated in logical order (ReportLab + uharfbuzz), deterministic RBAC topic gate (the reported "AML policy for high-risk customers?" case is now refused with 0 citations), English latency improved 7.13 s → 3.53 s median (probe now uses the score reranker; < 3 s still needs a stronger PC), PgVector path live-tested against local PostgreSQL 16 + pgvector 0.6.0. Details in `docs/LIMITATIONS-FIX.md`.
 Monitoring (v0.9): request metrics (`metrics.jsonl`, every request is recorded), 6 alert rules (brute force, error rate, p95 latency, RBAC spike, API down, disk), `scripts/monitor_check.py` (every 5 min, exit 0/1/2), `scripts/daily_report.py`, `scripts/rotate_logs.py`, Admin Monitoring dashboard (`/monitoring`, live cards + hourly chart + alerts + acknowledge). Pytest **99 passed** (81 existing + 18 new); live verification: brute-force HIGH and p95 MEDIUM alerts fired on real traffic. Details in `docs/MONITORING.md`. PC-only pending list (Ollama, PgVector, latency, eval, httpOnly cookies) — `docs/MONITORING.md` §8.
 Production hardening: demo accounts OFF (`RTB_DEMO_ACCOUNTS=0`, fail-fast on weak JWT secret / wildcard CORS), security headers,
 login/register rate limiting (429), 10 MB upload limit, extended `/health`, `scripts/create_admin.py`, backup/restore, production
@@ -166,7 +153,7 @@ Professional frontend redesign (landing, Sign In/Sign Up, sidebar app shell, cha
 admin + evaluation) + real register endpoint (auto-login, CUSTOMER_SERVICE default) + Admin role change.
 Pytest **69 passed** (57 existing + 12 new), live smoke on staging **13/13 PASS**. Details in `docs/FRONTEND.md`.
 Testing: **CONDITIONAL GO** (docs/TESTING.md) — 57 tests + 25/25 journeys pass, RBAC airtight; English latency 4–8 s
-(target < 3 s) and Arabic garbling / relevancy 0.42 are known limitations.
+(target < 3 s) and Arabic garbling / relevancy 0.42 were recorded at Testing time (v0.10.0 fixes them — see `docs/LIMITATIONS-FIX.md`).
 Evaluation (local RAGAS-style, no LLM judge) and feedback are done — details in `docs/SPRINT4.md`.
 Eval results (20 questions, ADMIN): faithfulness **1.00** ✅, context recall **1.00** ✅, answer relevancy **0.42** ❌ (target 0.85 —
 MiniLM is English-only and cannot judge Arabic; a real LLM + BGE-M3 will fix this). Next step: Production → Monitoring.

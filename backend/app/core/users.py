@@ -142,6 +142,23 @@ def update_user_role(email: str, new_role: str) -> dict | None:
     return None
 
 
+def update_password(email: str, new_password: str) -> dict | None:
+    """Set a new (bcrypt-hashed) password for a user. Used by the
+    admin password reset (v0.10). Returns the updated user, or None
+    if the email does not exist."""
+    from app.core.security import hash_password
+
+    email = (email or "").strip().lower()
+    users = load_users()
+    for user in users:
+        if user.get("email", "").lower() == email:
+            user["password_hash"] = hash_password(new_password)
+            save_users(users)
+            logger.info("Password updated for %s (admin reset)", email)
+            return user
+    return None
+
+
 def list_public_users() -> list[dict]:
     return [public_user(u) for u in load_users()]
 

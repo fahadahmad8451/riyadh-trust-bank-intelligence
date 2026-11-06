@@ -290,14 +290,19 @@ def _score_rerank(query: str, candidates: list[dict]) -> list[dict]:
     return out
 
 
-def rerank(query: str, candidates: list[dict], top_k: int = RERANK_TOP_K) -> list[dict]:
+def rerank(query: str, candidates: list[dict], top_k: int = RERANK_TOP_K,
+           force_score: bool = False) -> list[dict]:
     """Rerank fused candidates down to top_k. Returns chunks with a
     'rerank_score' field and a 'reranker' field naming the method used.
     Arabic queries always use the score reranker (see module docstring:
-    the English MS MARCO cross-encoder mis-ranks Arabic)."""
+    the English MS MARCO cross-encoder mis-ranks Arabic). The RBAC
+    probe (v0.10) passes force_score=True: it only needs a top-1
+    comparison, and a cross-encoder predict costs ~3s on this
+    RAM-starved VM — the probe runs on every chat, so it uses the
+    score reranker and leaves the cross-encoder for the real answer."""
     if not candidates:
         return []
-    if detect_language(query) == "ar":
+    if detect_language(query) == "ar" or force_score:
         out = _score_rerank(query, candidates)[:top_k]
         for d in out:
             d["reranker"] = "score"
@@ -343,10 +348,17 @@ class HybridRetriever:
         self._chunks = list(self.store._meta)
 
     def retrieve(self, question: str, top_k: int = RERANK_TOP_K,
-                 allowed_departments: list[str] | None = None) -> dict:
+                 allowed_departments: list[str] | None = None,
+                 rerank_mode: str | None = None) -> dict:
         """Returns {language, vector_results, bm25_results, fused, reranked,
         top_score, reranker}. top_score is the best vector cosine score —
         the guardrail threshold is applied to it in generation.py.
+
+        rerank_mode="score" (v0.10) forces the score reranker even for
+        English — used by the RBAC probe, which only needs a top-1
+        comparison and must not pay a ~3s cross-encoder predict on
+        every chat. The real answer always uses the cross-encoder
+        (unless RTB_RERANKER=off or the model is unavailable).
 
         RBAC (Sprint 3): when allowed_departments is given, ONLY chunks
         from those departments are searched — the filter is applied
@@ -397,7 +409,8 @@ class HybridRetriever:
             [r for r in vector_results if r["score"] >= VECTOR_FLOOR],
             bm25_results,
         ])
-        reranked = rerank(question, fused, top_k=top_k)
+        reranked = rerank(question, fused, top_k=top_k,
+                          force_score=(rerank_mode == "score"))
         top_score = vector_results[0]["score"] if vector_results else 0.0
         bm25_top_score = bm25_results[0]["bm25_score"] if bm25_results else 0.0
         # The reranker actually used for THIS query (Arabic queries use

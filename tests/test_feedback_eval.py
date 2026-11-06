@@ -60,7 +60,7 @@ def login(client, who: str) -> dict:
     email, password = USERS[who]
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
-    return {"Authorization": f"Bearer {res.json()['data']['access_token']}"}
+    return {"Authorization": f"Bearer {client.cookies.get('rtb_access')}"}
 
 
 def ask(client, headers: dict, question: str) -> dict:
@@ -124,6 +124,7 @@ def test_ragas_is_not_used():
 # 3. Feedback: auth, validation, upsert, stats
 # ---------------------------------------------------------------------------
 def test_feedback_requires_login(client):
+    client.cookies.clear()
     res = client.post("/api/v1/feedback",
                       json={"message_id": "nope", "rating": "up"})
     assert res.status_code == 401

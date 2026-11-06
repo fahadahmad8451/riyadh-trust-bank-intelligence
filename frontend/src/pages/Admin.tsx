@@ -12,6 +12,7 @@ import {
   type FeedbackStats,
   type HealthResponse,
   type MetricsResponse,
+  type PasswordResetRequestRow,
   type Role,
   type User,
 } from '../api/client'
@@ -33,6 +34,13 @@ export default function Admin() {
   const [error, setError] = useState<string | null>(null)
   const [pendingRole, setPendingRole] = useState<{ user: User; role: Role } | null>(null)
   const [changing, setChanging] = useState(false)
+  // v0.10: password reset — pending forgot-password requests, plus
+  // the admin's "set a new temporary password" dialog.
+  const [resetRequests, setResetRequests] = useState<PasswordResetRequestRow[]>([])
+  const [resetTarget, setResetTarget] = useState<{ email: string } | null>(null)
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetConfirm, setResetConfirm] = useState('')
+  const [resetting, setResetting] = useState(false)
   const lastMode = (() => {
     try {
       return localStorage.getItem('rtb_last_generation_mode')
@@ -45,16 +53,18 @@ export default function Admin() {
     setLoading(true)
     setError(null)
     try {
-      const [u, f, h, m] = await Promise.all([
+      const [u, f, h, m, r] = await Promise.all([
         api.adminUsers(),
         api.feedbackStats(),
         api.health(),
         api.metrics(),
+        api.passwordResetRequests('pending'),
       ])
       setUsers(u.data.users)
       setFeedback(f.data)
       setHealth(h)
       setMetrics(m)
+      setResetRequests(r.data.requests)
     } catch (e) {
       if (e instanceof Error && e.message === 'UNAUTHORIZED') {
         navigate('/login')
@@ -86,6 +96,40 @@ export default function Admin() {
       toast(e instanceof Error ? e.message : 'Role could not be changed.', 'error')
     } finally {
       setChanging(false)
+    }
+  }
+
+  async function confirmPasswordReset() {
+    if (!resetTarget) return
+    if (resetPassword !== resetConfirm) {
+      toast('Passwords do not match.', 'error')
+      return
+    }
+    setResetting(true)
+    try {
+      await api.resetUserPassword(resetTarget.email, resetPassword, resetConfirm)
+      toast(
+        `Password reset for ${resetTarget.email}. Give them the new temporary password directly — their old sessions are revoked.`,
+        'success',
+      )
+      setResetTarget(null)
+      setResetPassword('')
+      setResetConfirm('')
+      void load()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Password could not be reset.', 'error')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  async function dismissResetRequest(id: string) {
+    try {
+      await api.dismissPasswordResetRequest(id)
+      toast('Reset request dismissed.', 'success')
+      void load()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Request could not be dismissed.', 'error')
     }
   }
 
@@ -157,6 +201,7 @@ export default function Admin() {
                       <th className="px-4 py-3 font-semibold text-navy-900">Role</th>
                       <th className="px-4 py-3 font-semibold text-navy-900">Departments</th>
                       <th className="px-4 py-3 font-semibold text-navy-900">Status</th>
+                      <th className="px-4 py-3 font-semibold text-navy-900">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -194,9 +239,86 @@ export default function Admin() {
                               </p>
                             )}
                           </td>
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-navy-700 hover:bg-slate-50"
+                              onClick={() => {
+                                setResetTarget({ email: u.email })
+                                setResetPassword('')
+                                setResetConfirm('')
+                              }}
+                            >
+                              Reset password
+                            </button>
+                          </td>
                         </tr>
                       )
                     })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Password reset requests (v0.10) */}
+          <div>
+            <h2 className="text-lg font-semibold text-navy-900">
+              Password reset requests ({resetRequests.length})
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Users who forgot their password ask here. There is no email in this system — set a
+              new temporary password and give it to them directly. Their old sessions are revoked
+              when you reset.
+            </p>
+            {resetRequests.length === 0 ? (
+              <div className="mt-3">
+                <EmptyState
+                  title="No pending requests"
+                  message="No one has asked for a password reset."
+                />
+              </div>
+            ) : (
+              <div className="mt-3 overflow-x-auto rounded-xl border bg-white shadow-sm">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50 text-left">
+                      <th className="px-4 py-3 font-semibold text-navy-900">Email</th>
+                      <th className="px-4 py-3 font-semibold text-navy-900">Requested</th>
+                      <th className="px-4 py-3 font-semibold text-navy-900">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resetRequests.map((r) => (
+                      <tr key={r.id} className="border-b last:border-0">
+                        <td className="px-4 py-3 font-medium text-navy-900">{r.email}</td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {new Date(r.requested_at).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="rounded-lg bg-navy-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-navy-800"
+                              onClick={() => {
+                                setResetTarget({ email: r.email })
+                                setResetPassword('')
+                                setResetConfirm('')
+                              }}
+                            >
+                              Set new password
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
+                              onClick={() => void dismissResetRequest(r.id)}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -282,6 +404,60 @@ export default function Admin() {
                 className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-50"
               >
                 {changing ? 'Changing…' : 'Change role'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {resetTarget && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Reset password">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-navy-900">Reset password</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Set a new temporary password for <strong>{resetTarget.email}</strong>. Their old
+              password stops working immediately and all their sessions are revoked. Give them
+              the new password directly.
+            </p>
+            <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="reset-password">
+              New password
+            </label>
+            <input
+              id="reset-password"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-200"
+              type="password"
+              autoComplete="new-password"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+            />
+            <label className="mt-3 block text-sm font-medium text-slate-700" htmlFor="reset-confirm">
+              Confirm new password
+            </label>
+            <input
+              id="reset-confirm"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-200"
+              type="password"
+              autoComplete="new-password"
+              value={resetConfirm}
+              onChange={(e) => setResetConfirm(e.target.value)}
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              At least 8 characters, with at least one letter and one digit.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setResetTarget(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={resetting || !resetPassword}
+                onClick={() => void confirmPasswordReset()}
+                className="rounded-lg bg-navy-900 px-4 py-2 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-50"
+              >
+                {resetting ? 'Resetting…' : 'Reset password'}
               </button>
             </div>
           </div>
