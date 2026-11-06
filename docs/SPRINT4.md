@@ -18,7 +18,7 @@ it — BIOS locked + VT-x Disabled); local-first, same as Sprints 1–3.
   now returns a `message_id`); a made-up id is rejected. One vote per
   (user, message) — voting again updates the vote, it does not duplicate
   it. Stores in `data/feedback.jsonl` (gitignored). Returns
-  `"Shukriya, feedback mil gaya."`
+  `"Thank you, your feedback was received."`.
 - `GET /api/v1/admin/feedback-stats` — ADMIN only: `total`, `up`, `down`,
   `percent_up`, and `worst` — the down-rated messages with the preceding
   user question, the answer excerpt and its citations.
@@ -28,7 +28,7 @@ it — BIOS locked + VT-x Disabled); local-first, same as Sprints 1–3.
   is the record; the table exists in the schema for the PostgreSQL
   deployment, when chat history moves to the DB.
 - Frontend: every assistant answer in Chat has 👍 / 👎 buttons (uses the
-  real `message_id`); on success it shows "Shukriya, feedback mil gaya."
+  real `message_id`); on success it shows "Thank you, your feedback was received."
   Admin has a Feedback section (totals + worst table, empty state when
   there is no feedback yet).
 
@@ -51,10 +51,8 @@ it — BIOS locked + VT-x Disabled); local-first, same as Sprints 1–3.
 ### RBAC-blocked refusal (polish)
 - When a role asks about a topic in a department they cannot see AND no
   allowed chunk matches well, the answer is now a clean refusal:
-  - EN: *"You do not have permission to view documents on this topic."*
+  - EN: *"Your role does not have access to documents on this topic. Please ask your administrator or the Compliance Department."*
   - AR: *"ليس لديك صلاحية لعرض المستندات المتعلقة بهذا الموضوع."*
-  - Roman Urdu (chat display): *"Aap ke role ko is topic ke documents
-    dekhne ki ijazat nahi hai"*
   - `generation_mode: "rbac-refusal"`, `refused: true`, `citations: []`,
     `rbac_blocked: true`, `blocked_department: COMPLIANCE|HR`.
 - How it decides (see `generation._rbac_blocked_department`): one
@@ -83,8 +81,8 @@ it — BIOS locked + VT-x Disabled); local-first, same as Sprints 1–3.
   Sprint-1 data fix, not a Sprint-4 code fix.
 
 ### Small UX polish
-- Chat: thumbs up/down per answer, "Shukriya, feedback mil gaya" on
-  success, error text in plain Roman Urdu/English.
+- Chat: thumbs up/down per answer, "Thank you, your feedback was received" on
+  success, error text in plain English.
 - Admin: Evaluation section (aggregates vs targets, per-question table,
   "Run evaluation" button with a running state + "2–4 minute" note, and
   an empty state when no run exists yet) and a Feedback section (totals
@@ -212,7 +210,7 @@ Ollama is not reachable on this VM, same as Sprints 2–3):
 
 ### Feedback (live, at verification time)
 - One real vote during the live test: admin 👍 on a KYC answer →
-  `POST /feedback` returned "Shukriya, feedback mil gaya." and
+  `POST /feedback` returned "Thank you, your feedback was received." and
   `GET /admin/feedback-stats` showed `total 1, up 1, down 0,
   percent_up 100.0`. (This is one demo vote, not a user study.)
 
@@ -229,7 +227,7 @@ Ollama is not reachable on this VM, same as Sprints 2–3):
   are built now, so there is no stub left to return 501).
 - **Live FastAPI test** (uvicorn, port 8123): admin login → chat
   (extractive-fallback, 5 citations, `message_id` returned) → POST
-  /feedback up → `"Shukriya, feedback mil gaya."` → GET
+  /feedback up → `"Thank you, your feedback was received."` → GET
   /admin/feedback-stats `{total: 1, up: 1, down: 0, percent_up: 100.0}`
   → GET /eval/results (aggregates as above) → GET /health
   `version 0.5.0, status ok`.
@@ -257,7 +255,7 @@ Ollama is not reachable on this VM, same as Sprints 2–3):
 | `tests/test_feedback_eval.py` | NEW — 14 tests |
 | `tests/test_health.py` | Updated for v0.5 (version + no-stubs test) |
 | `frontend/src/api/client.ts` | `feedback`, `feedbackStats`, `evalResults`, `evalRun` + types |
-| `frontend/src/pages/Chat.tsx` | Thumbs up/down per answer + "Shukriya" message |
+| `frontend/src/pages/Chat.tsx` | Thumbs up/down per answer + "Thank you" message |
 | `frontend/src/pages/Admin.tsx` | Evaluation + Feedback sections |
 | `docs/SPRINT4.md` | This file |
 
@@ -290,7 +288,7 @@ python -m uvicorn app.main:app --port 8000
 # new terminal, same folder, venv active:
 python ..\scripts\run_eval.py        # full 20-question eval (~2 min)
 # or in the browser: Admin -> Evaluation -> "Run evaluation"
-# Feedback: Chat me kisi jawab par 👍 ya 👎 dabao; Admin -> Feedback me dekho.
+# Feedback: press 👍 or 👎 on any answer in Chat; see it in Admin -> Feedback.
 ```
 
 Ollama (real LLM answers, not extractive): install Ollama for Windows,

@@ -1,30 +1,30 @@
 # SETUP — Riyadh Trust Bank Enterprise Intelligence Platform v0.1
 
-## DOCKER NAHI CHAHIYE — ye setup bina Docker ke chalega
+## DOCKER NOT REQUIRED — this setup runs without Docker
 
-Fahad ke laptop par Docker Desktop nahi chalta: BIOS password-locked hai aur
-VT-x Disabled hai, is liye Docker / VirtualBox dono nahi chal sakte.
-Ye setup is liye **local Windows, bina Docker** ke banaya gaya hai.
-`infra/docker-compose.optional.yml` sirf un logon ke liye hai jin ke PC par
-Docker chalta ho — Fahad use **na** chalaye.
+Docker Desktop does not run on Fahad's laptop: the BIOS is password-locked and
+VT-x is Disabled, so neither Docker nor VirtualBox can run.
+This setup is therefore built for **local Windows, without Docker**.
+`infra/docker-compose.optional.yml` is only for people whose PCs can run
+Docker — Fahad should **not** run it.
 
-## 1. Kya chahiye (Prerequisites)
+## 1. Requirements (Prerequisites)
 
-| Cheez | Version | Check command (PowerShell) |
+| Item | Version | Check command (PowerShell) |
 |---|---|---|
 | Python | 3.12+ | `python --version` |
 | Node.js | 20+ | `node --version` |
-| PostgreSQL | 16 (local) | `psql --version` — port 5432 pehle se open hai |
+| PostgreSQL | 16 (local) | `psql --version` — port 5432 is already open |
 | Git | any | `git --version` |
 
-**Nahi chahiye:** Docker, Redis, Ollama — ye sab optional hain.
+**Not required:** Docker, Redis, Ollama — all of these are optional.
 
 ## 2. Backend — PowerShell steps
 
 ```powershell
 cd riyadh-trust-bank-intelligence
 copy .env.example .env
-# .env kholo, SECRET_KEY badlo (koi bhi lambi random string)
+# Open .env and change SECRET_KEY (any long random string)
 
 cd backend
 python -m venv venv
@@ -33,7 +33,7 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
 
-Verify (browser ya PowerShell):
+Verify (browser or PowerShell):
 ```powershell
 curl.exe http://127.0.0.1:8000/api/v1/health
 # Expected: {"success":true,"data":{"status":"ok","service":"Riyadh Trust Bank — Enterprise Intelligence Platform","version":"0.1.0","environment":"development"},...}
@@ -41,52 +41,52 @@ curl.exe http://127.0.0.1:8000/api/v1/metrics
 ```
 API docs: http://127.0.0.1:8000/docs
 
-**Agar `Activate.ps1` error de** (execution policy):
+**If `Activate.ps1` gives an error** (execution policy):
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
-phir dobara activate karo.
+Then activate again.
 
 ## 3. Database — local PostgreSQL
 
 ```powershell
-# Database ek dafa banao (psql ya pgAdmin se):
+# Create the database once (via psql or pgAdmin):
 createdb rtb_intelligence
-# .env me yehi hai: DATABASE_URL=postgresql://localhost:5432/rtb_intelligence
+# This is what is in .env: DATABASE_URL=postgresql://localhost:5432/rtb_intelligence
 ```
 
-- Tables **abhi create nahi hoti** — Sprint 1 me `Base.metadata.create_all` + pgvector aayega.
-- **SQLite fallback:** agar PostgreSQL band ho, to bhi backend start hoga — config default SQLite file (`rtb_intelligence.db`) par girta hai. Ye sirf skeleton ke liye hai; asal data Sprint 1 me PostgreSQL par jayega.
-- **pgvector:** Setup me install karne ki zaroorat nahi. Sprint 1 me `CREATE EXTENSION vector;` + `pip install pgvector` karenge.
+- Tables **are not created yet** — in Sprint 1 `Base.metadata.create_all` + pgvector will arrive.
+- **SQLite fallback:** if PostgreSQL is stopped, the backend will still start — the config defaults to the SQLite file (`rtb_intelligence.db`). This is only for the skeleton; the real data will go to PostgreSQL in Sprint 1.
+- **pgvector:** there is no need to install it during Setup. In Sprint 1 we will run `CREATE EXTENSION vector;` + `pip install pgvector`.
 
-## 4. Frontend — PowerShell steps (doosri terminal)
+## 4. Frontend — PowerShell steps (second terminal)
 
 ```powershell
 cd riyadh-trust-bank-intelligence\frontend
 npm install
 npm run dev
 ```
-Open http://localhost:3000 — header me **"API online"** dikhna chahiye jab backend chal raha ho, warna **"API offline"**. Chat input Setup me disabled hai (Sprint 2).
+Open http://localhost:3000 — the header should show **"API online"** when the backend is running, otherwise **"API offline"**. Chat input is disabled in Setup (Sprint 2).
 
 ## 5. Redis / Celery — OPTIONAL
 
-- Bina Redis ke backend bilkul theek chalta hai, health OK rehta hai.
-- Celery worker Sprint 1 me aayega (document ingestion background me).
-- Agar Redis install karna ho (baad me): Windows par WSL ya Memurai use hota hai — Setup me mat karo.
+- The backend runs perfectly without Redis, and health remains OK.
+- The Celery worker will arrive in Sprint 1 (document ingestion in the background).
+- If Redis needs to be installed (later): on Windows, WSL or Memurai is used — do not do it in Setup.
 
-## 6. Ollama — OPTIONAL (Windows installer, Docker nahi)
+## 6. Ollama — OPTIONAL (Windows installer, not Docker)
 
-- Download: https://ollama.com/download/windows — normal Windows installer hai.
-- Setup me **zaroori nahi** — health check bina Ollama ke bhi OK hai.
-- Models Sprint 2 me: `ollama pull llama3.1:8b` aur `ollama pull qwen2.5:7b`.
+- Download: https://ollama.com/download/windows — a normal Windows installer.
+- It is **not required** in Setup — the health check is OK even without Ollama.
+- Models in Sprint 2: `ollama pull llama3.1:8b` and `ollama pull qwen2.5:7b`.
 
-## 7. Docker — OPTIONAL ONLY (Fahad ke liye nahi)
+## 7. Docker — OPTIONAL ONLY (not for Fahad)
 
 ```powershell
-# SIRF tab chalao jab tumhare PC par Docker chalta ho:
+# ONLY run this if Docker runs on your PC:
 docker compose -f infra/docker-compose.optional.yml up -d
 ```
-Fahad ke laptop par ye **nahi chalega** (VT-x off) — is liye upar wale local steps hi primary hain.
+This will **not run** on Fahad's laptop (VT-x off) — so the local steps above are the primary ones.
 
 ## 8. Tests
 
@@ -94,15 +94,15 @@ Fahad ke laptop par ye **nahi chalega** (VT-x off) — is liye upar wale local s
 cd backend
 .\venv\Scripts\Activate.ps1
 python -m pytest ../tests/test_health.py -v
-# 3 tests pass hone chahiye: health 200, metrics, 501 stub
+# 3 tests should pass: health 200, metrics, 501 stub
 ```
 
-## 9. Masle (Troubleshooting)
+## 9. Issues (Troubleshooting)
 
-| Masla | Hal |
+| Issue | Solution |
 |---|---|
-| Port 8000 busy | `uvicorn app.main:app --reload --port 8001` — frontend proxy tab bhi 8001 par badlo |
-| `pip install` slow/fail | `pip install --upgrade pip` phir dobara |
-| Frontend "API offline" | Pehle backend Terminal 1 me chal raha ho, phir page refresh karo |
-| PostgreSQL connect nahi | Sprint 1 tak DB zaroori nahi — backend phir bhi chalega (SQLite fallback) |
-| PowerShell venv activate nahi | Execution policy wala step upar dekho |
+| Port 8000 busy | `uvicorn app.main:app --reload --port 8001` — also change the frontend proxy to 8001 |
+| `pip install` slow/fail | `pip install --upgrade pip` then try again |
+| Frontend "API offline" | First make sure the backend is running in Terminal 1, then refresh the page |
+| PostgreSQL will not connect | The DB is not required until Sprint 1 — the backend will still run (SQLite fallback) |
+| PowerShell venv will not activate | See the execution policy step above |

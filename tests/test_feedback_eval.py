@@ -154,12 +154,12 @@ def test_feedback_up_then_down_upserts_and_stats(client):
     res = client.post("/api/v1/feedback", headers=headers,
                       json={"message_id": mid, "rating": "up"})
     assert res.status_code == 200
-    assert res.json()["data"]["message"] == "Shukriya, feedback mil gaya."
+    assert res.json()["data"]["message"] == "Thank you, your feedback was received."
     assert res.json()["data"]["updated"] is False
     # Change the vote: same (user, message) is updated, not duplicated.
     res = client.post("/api/v1/feedback", headers=headers,
                       json={"message_id": mid, "rating": "down",
-                            "comment": "jawab adhoora tha"})
+                            "comment": "the answer was incomplete"})
     assert res.json()["data"]["updated"] is True
     stats = client.get("/api/v1/admin/feedback-stats", headers=headers)
     assert stats.status_code == 200
@@ -170,7 +170,7 @@ def test_feedback_up_then_down_upserts_and_stats(client):
     assert len(body["worst"]) == 1
     assert body["worst"][0]["message_id"] == mid
     assert body["worst"][0]["question"] == KYC_Q
-    assert body["worst"][0]["comment"] == "jawab adhoora tha"
+    assert body["worst"][0]["comment"] == "the answer was incomplete"
 
 
 def test_feedback_stats_is_admin_only(client):
@@ -189,7 +189,7 @@ def test_service_aml_gets_rbac_refusal(client):
     assert data["generation_mode"] == "rbac-refusal"
     assert data.get("rbac_blocked") is True
     assert data.get("blocked_department") == "COMPLIANCE"
-    assert "ijazat nahi hai" in data["answer"]
+    assert "does not have access" in data["answer"]
 
 
 def test_compliance_hr_gets_rbac_refusal(client):

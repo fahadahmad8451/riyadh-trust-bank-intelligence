@@ -55,8 +55,8 @@ NOT LangGraph — no LangGraph import is used, and the code does not claim
 otherwise.
 - **Ollama first**: `OLLAMA_HOST` (default http://localhost:11434),
   model `llama3.1:8b`, temperature 0.1, grounded system prompt
-  ("Sirf diye gaye context se jawab do... Har claim ke sath [Doc, Page]
-  citation do."). **Ollama was NOT reachable on this VM** (no Ollama
+  ("Answer only from the given context... Give a [Doc, Page]
+  citation with every claim."). **Ollama was NOT reachable on this VM** (no Ollama
   server here), so no LLM answer was produced here.
 - **Extractive fallback (what actually ran here)**: the answer is composed
   ONLY from the top retrieved chunks — relevant sentences are quoted with
@@ -64,8 +64,7 @@ otherwise.
   returned in every response, so it is never presented as an LLM answer.
 - **Guardrail**: refuse when the best vector score is below 0.25 AND
   BM25 found no content-word match (BM25 top score <= 0), or when
-  retrieval returns nothing. Refusal text: "Is document me ye maloomat
-  nahi hai" (EN) / "هذه المعلومات غير موجودة في المستندات" (AR), with
+  retrieval returns nothing. Refusal text: "This information is not in the documents." (EN) / "هذه المعلومات غير موجودة في المستندات" (AR), with
   empty citations. PII-like 10-digit numbers are masked in answers.
 - **Citations**: every non-refusal answer carries at least 1 citation,
   each pointing at a chunk that really exists in the store
@@ -172,7 +171,8 @@ save, chat API refusal).
   "extractive-fallback"`, `refused: false`, latency 23140.7 ms (first
   call, model loads), 5 citations (KYC p.1 top).
 - `POST /api/v1/chat` weather question -> 200, `refused: true`,
-  answer "Is document me ye maloomat nahi hai.", citations [].
+  answer "This information is not in the documents.",
+  citations [].
 - `GET /api/v1/conversations` -> 2 conversations saved, each with
   2 messages (user + assistant).
 

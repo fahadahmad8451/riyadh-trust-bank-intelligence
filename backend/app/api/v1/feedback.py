@@ -143,7 +143,7 @@ async def post_feedback(payload: FeedbackRequest, user: dict = Depends(get_curre
         "message_id": payload.message_id,
         "rating": payload.rating,
         "updated": updated,
-        "message": "Shukriya, feedback mil gaya.",
+        "message": "Thank you, your feedback was received.",
     })
 
 

@@ -135,7 +135,7 @@ def test_topic_matrix(client, question, blocked_service, blocked_compliance):
             assert data["generation_mode"] == "rbac-refusal", data
             assert data["citations"] == [], f"{who} must get 0 citations: {question!r}"
             assert data["blocked_department"] == blocked, data
-            assert "role" in data["answer"].lower() or "ijazat" in data["answer"] or \
+            assert "role" in data["answer"].lower() or "does not have access" in data["answer"] or \
                 "صلاحية" in data["answer"], data["answer"]
 
 

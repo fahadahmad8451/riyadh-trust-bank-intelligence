@@ -16,7 +16,7 @@ Employees at a bank waste hours hunting for the right policy, contract, or compl
 
 - **Fictional bank, synthetic data only.** "Riyadh Trust Bank" is not a real bank. All 8 documents (24 pages) are fictional, created for this demo. **No real customer data, ever.**
 - **Local-first, $0.** Runs on a laptop without Docker or any cloud service: Python venv + Node + local PostgreSQL. No paid APIs, no paid LLM — answers run in extractive-fallback mode until Ollama is installed.
-- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.0).
+- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.1).
 
 ## Features
 
@@ -132,7 +132,7 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 
 ---
 
-## Build history (v0.1 → v0.10.0)
+## Build history (v0.1 → v0.10.1)
 
 > The section below is a chronological build log, written as each version was completed. Some older lines describe the state at the time, when a feature had not been built yet; the current state is described in "What it is" above. No facts have been removed.
 
@@ -142,6 +142,8 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 > Docker is optional only (`infra/docker-compose.optional.yml`) — for machines where Docker does run.
 
 Enterprise Intelligence Platform for a fictional Saudi bank (Riyadh Trust Bank) — a portfolio project, not a real company, with no real customer data.
+
+Status: **v0.10.1 DONE — No Roman Urdu.** Every user-facing string, API message, doc, and code comment is now 100% professional English: demo account labels, feedback message, RBAC and general refusals, system prompt, and all docs (PRODUCTION, STAGING, SETUP, LANDING-FIX, SPRINT2, SPRINT4, TESTING). Full wordlist scan: 0 matches. Pytest 142 passed.
 
 Status: **Fixes v0.10.0 DONE — Project 1 COMPLETE.** httpOnly cookie auth (tokens out of localStorage, SameSite=Lax + Origin check), admin password reset + forgot-password request flow, Arabic PDFs regenerated in logical order (ReportLab + uharfbuzz), deterministic RBAC topic gate (the reported "AML policy for high-risk customers?" case is now refused with 0 citations), English latency improved 7.13 s → 3.53 s median (probe now uses the score reranker; < 3 s still needs a stronger PC), PgVector path live-tested against local PostgreSQL 16 + pgvector 0.6.0. Details in `docs/LIMITATIONS-FIX.md`.
 Monitoring (v0.9): request metrics (`metrics.jsonl`, every request is recorded), 6 alert rules (brute force, error rate, p95 latency, RBAC spike, API down, disk), `scripts/monitor_check.py` (every 5 min, exit 0/1/2), `scripts/daily_report.py`, `scripts/rotate_logs.py`, Admin Monitoring dashboard (`/monitoring`, live cards + hourly chart + alerts + acknowledge). Pytest **99 passed** (81 existing + 18 new); live verification: brute-force HIGH and p95 MEDIUM alerts fired on real traffic. Details in `docs/MONITORING.md`. PC-only pending list (Ollama, PgVector, latency, eval, httpOnly cookies) — `docs/MONITORING.md` §8.

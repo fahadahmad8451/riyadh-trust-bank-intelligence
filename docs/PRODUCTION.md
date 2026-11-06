@@ -1,27 +1,27 @@
 # Production — Riyadh Trust Bank Enterprise Intelligence Platform (v0.8)
 
 **Status: Production DONE & verified on this VM (2026-11-06).**
-Staging v0.6 ke baad ka step hai (docs/STAGING.md). Fahad ne "Haan,
-Production shuru karo" kaha tha.
+It is the step after Staging v0.6 (docs/STAGING.md). Fahad said "Yes,
+start Production".
 
-## Production yahan kya hai — aur kya NAHI hai
+## What Production is here — and what it is NOT
 
-**Hai:** wahi code jo dev/staging me hai, lekin production mode me —
-production hardening (neeche §1), alag data (`data-prod/`), DEBUG off,
+**Is:** the same code as in dev/staging, but in production mode —
+production hardening (see §1 below), separate data (`data-prod/`), DEBUG off,
 fresh JWT secret, **demo accounts OFF**, backup/restore, runbook.
-Fahad ke PC par localhost par chalega (API :8000, web :3000), $0.
+It will run on Fahad's PC on localhost (API :8000, web :3000), $0.
 
-**NAHI hai:**
-- Koi cloud deployment nahi, koi public URL nahi — sab `localhost` par hai.
-- Koi asal customer data nahi — wahi 8 synthetic PDFs.
-- Koi "deployed to the internet" claim nahi — jo internet par nahi hai,
-  usko deployed mat kaho. Portfolio demo ke liye ye local production hai.
-- Monitoring phase abhi baqi hai (Langfuse dashboards, scheduled
-  healthcheck) — §6 dekho.
+**Is NOT:**
+- No cloud deployment, no public URL — everything is on `localhost`.
+- No real customer data — the same 8 synthetic PDFs.
+- No "deployed to the internet" claim — do not call something deployed that is not on the internet.
+  For a portfolio demo, this is local production.
+- The Monitoring phase is still remaining (Langfuse dashboards, scheduled
+  healthcheck) — see §6.
 
 ## Port map (dev vs staging vs production)
 
-| Cheez | Dev | Staging | **Production** |
+| Item | Dev | Staging | **Production** |
 |---|---|---|---|
 | API | http://127.0.0.1:8000 | http://127.0.0.1:8001 | **http://127.0.0.1:8000** |
 | Web | http://localhost:3000 | http://localhost:3001 | **http://localhost:3000** |
@@ -30,156 +30,155 @@ Fahad ke PC par localhost par chalega (API :8000, web :3000), $0.
 | Demo accounts | ON | ON | **OFF** |
 | Frontend build | `frontend/dist/` (dev) | `frontend/dist-staging/` | **`frontend/dist/` (prod build)** |
 
-**Dev aur production ports SHARE karte hain (:8000/:3000) — jaan boojh
-kar.** Production is machine ka live instance hai; dev aur production
-ek saath nahi chal sakte. Production start karne se pehle dev band
-karo, warna bind fail hoga ("address already in use" — runbook §5).
-Staging (:8001/:3001) production ke saath chal sakta hai.
+**Dev and production ports SHARE (:8000/:3000) — deliberately.**
+Production is this machine's live instance; dev and production
+cannot run together. Stop dev before starting production,
+otherwise the bind will fail ("address already in use" — runbook §5).
+Staging (:8001/:3001) can run alongside production.
 
-## 1. Production hardening (v0.8 me kya badla, vs v0.7)
+## 1. Production hardening (what changed in v0.8, vs v0.7)
 
-| # | Cheez | Kahan | Status |
+| # | Item | Where | Status |
 |---|---|---|---|
-| 1 | Demo accounts OFF in prod | `RTB_DEMO_ACCOUNTS=0` (`.env.production.example`); production me flag bhool bhi jaye to `validate_production_settings()` demo off kar deta hai (sirf explicit `=1` wapas on karta hai) | ✅ DONE + live prove (demo login → 401) |
-| 2 | Seed demo users nahi hote | `app/core/users.py seed_users()` — flag off ho to kuch nahi likhta, `[]` return karta hai | ✅ DONE (data-prod me pehle koi users.json hi nahi thi) |
-| 3 | Demo email se login block | `app/api/v1/auth.py` — flag off ho to demo email par 401, chahe users.json me demo user copy bhi kar diya jaye | ✅ DONE + pytest |
-| 4 | Pehla admin banane ka tareeqa | `scripts/create_admin.py --email you@bank.local` (bcrypt hash, role ADMIN; demo email mana hai, duplicate mana hai) | ✅ DONE + live prove |
-| 5 | Weak JWT secret = server start NAHI hota | `app/core/config.py validate_production_settings()` — secret < 32 chars ya placeholder (`CHANGE-ME`/`REPLACE-ME`) ho to import par `RuntimeError`, saaf message ke sath | ✅ DONE + pytest (subprocess) |
-| 6 | CORS wildcard mana hai | Production me `CORS_ORIGINS="*"` ho to bhi `RuntimeError`; prod default sirf `http://localhost:3000` | ✅ DONE + pytest (subprocess) |
-| 7 | DEBUG forced off | Production me `DEBUG=1` bhi ho to `settings.debug = False` | ✅ DONE (code + config) |
-| 8 | Security headers | Har response par: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; `Server` header uvicorn `--no-server-header` se band | ✅ DONE + live curl prove |
-| 9 | Rate limiting (in-memory) | Login: 5 FAILED attempts / 60 s per (IP, email) — sirf failures gini jati hain, kamyab login counter saaf kar deta hai. Register: 3 attempts / 60 s per (IP, email). Limit par **429 + `Retry-After` header**. `app/core/rate_limit.py` — koi nayi dependency nahi | ✅ DONE + pytest + live prove (6th wrong login → 429) |
-| 10 | Upload limit 10 MB | `POST /documents/upload` — stream karte waqt ginta hai, 10 MB se zyada ho to **413** aur partial file delete | ✅ DONE + pytest + live prove (11 MB → 413) |
-| 11 | Extended `/health` | `env, version, uptime_seconds, demo_accounts_enabled, reranker, embeddings, vector_store {status, documents, chunks}, generation_mode, database` — sirf file reads, koi model load nahi, koi Ollama probe nahi | ✅ DONE + live prove |
-| 12 | Reranker off flag | `RTB_RERANKER=off` — cross-encoder try kiye baghair score rerank (latency test ke liye, §4) | ✅ DONE + pytest |
-| 13 | Backup / restore | `scripts/backup.py` (timestamped zip, last 7 rakhta hai) + `scripts/restore.py` (pehle pre-restore backup, phir restore) | ✅ DONE + live prove |
-| 14 | Healthcheck script | `scripts/healthcheck.py` — exit 0/1, Monitoring phase ka probe | ✅ DONE + live prove |
-| 15 | Login page demo section | `frontend/src/pages/Login.tsx` — `/health` se `demo_accounts_enabled` parh kar demo section chhupata hai (prod me nahi dikhta) | ✅ DONE (bundle me verify) |
+| 1 | Demo accounts OFF in prod | `RTB_DEMO_ACCOUNTS=0` (`.env.production.example`); even if the flag is forgotten in production, `validate_production_settings()` turns demo off (only an explicit `=1` turns it back on) | ✅ DONE + live proof (demo login → 401) |
+| 2 | Seed demo users are not created | `app/core/users.py seed_users()` — if the flag is off it writes nothing, returns `[]` | ✅ DONE (no users.json existed in data-prod at first) |
+| 3 | Login with a demo email is blocked | `app/api/v1/auth.py` — if the flag is off, 401 on a demo email, even if a demo user was copied into users.json | ✅ DONE + pytest |
+| 4 | How to create the first admin | `scripts/create_admin.py --email you@bank.local` (bcrypt hash, role ADMIN; a demo email is refused, a duplicate is refused) | ✅ DONE + live proof |
+| 5 | Weak JWT secret = server does NOT start | `app/core/config.py validate_production_settings()` — if the secret is < 32 chars or a placeholder (`CHANGE-ME`/`REPLACE-ME`), `RuntimeError` on import, with a clear message | ✅ DONE + pytest (subprocess) |
+| 6 | CORS wildcard is refused | If production has `CORS_ORIGINS="*"` then also `RuntimeError`; the prod default is only `http://localhost:3000` | ✅ DONE + pytest (subprocess) |
+| 7 | DEBUG forced off | Even if production has `DEBUG=1`, `settings.debug = False` | ✅ DONE (code + config) |
+| 8 | Security headers | On every response: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; the `Server` header is disabled via uvicorn `--no-server-header` | ✅ DONE + live curl proof |
+| 9 | Rate limiting (in-memory) | Login: 5 FAILED attempts / 60 s per (IP, email) — only failures are counted, a successful login clears the counter. Register: 3 attempts / 60 s per (IP, email). On the limit, **429 + `Retry-After` header**. `app/core/rate_limit.py` — no new dependency | ✅ DONE + pytest + live proof (6th wrong login → 429) |
+| 10 | Upload limit 10 MB | `POST /documents/upload` — counts while streaming, if over 10 MB then **413** and the partial file is deleted | ✅ DONE + pytest + live proof (11 MB → 413) |
+| 11 | Extended `/health` | `env, version, uptime_seconds, demo_accounts_enabled, reranker, embeddings, vector_store {status, documents, chunks}, generation_mode, database` — only file reads, no model load, no Ollama probe | ✅ DONE + live proof |
+| 12 | Reranker off flag | `RTB_RERANKER=off` — rerank scores without trying the cross-encoder (for the latency test, §4) | ✅ DONE + pytest |
+| 13 | Backup / restore | `scripts/backup.py` (timestamped zip, keeps the last 7) + `scripts/restore.py` (first a pre-restore backup, then restore) | ✅ DONE + live proof |
+| 14 | Healthcheck script | `scripts/healthcheck.py` — exit 0/1, the probe for the Monitoring phase | ✅ DONE + live proof |
+| 15 | Login page demo section | `frontend/src/pages/Login.tsx` — reads `demo_accounts_enabled` from `/health` and hides the demo section (not shown in prod) | ✅ DONE (verified in the bundle) |
 | 16 | Version 0.8.0 | `config.py` + `test_health.py` + README | ✅ DONE |
 
-## 2. Promotion checklist — Staging se Production (final status)
+## 2. Promotion checklist — Staging to Production (final status)
 
-Staging checklist (STAGING.md) ke items ka aakhri hisab:
+The final accounting of the Staging checklist (STAGING.md) items:
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Demo passwords badle gaye | ✅ SUPERSEDED — production me demo accounts hain hi nahi (OFF). Demo passwords badalne ki zaroorat nahi, kyunke demo login hi nahi ho sakta. |
-| 2 | JWT secret set (Production, alag, lamba random) | ✅ DONE — `.env.production` me fresh 64-char secret (setup script ne banaya); weak secret par server start hi nahi hota. |
-| 3 | Ollama running + llama3.1:8b (asal LLM answers) | ⏳ **PC-PENDING** — is VM par Ollama nahi hai; answers extractive-fallback mode me hain (response me mode likha hota hai). Steps §4 me. |
-| 4 | PgVector tested on Fahad's PC (port 5432) | ⏳ **PC-PENDING** — is VM par Postgres nahi tha. Steps §4 me. |
-| 5 | English latency decision (PC par re-measure; agar > 3 s to cross-encoder fix) | ⏳ **PC-PENDING** — is VM par dobara napi: staging 7.26 / 4.51 / 8.38 s (median 7.26 s), target < 3 s abhi bhi miss. `RTB_RERANKER=off` flag taiyar hai (§4). |
-| 6 | Arabic garbling + relevancy 0.42 — accept ya fix ka faisla | ⏳ **PENDING (Fahad ka faisla)** — fix = PDFs logical-order Arabic se dobara banana + BGE-M3; dono abhi nahi hue. |
-| 7 | Full 20-question eval production env par | ⏳ **PC-PENDING** — staging me limit=3 chala tha (faithfulness 1.00, recall 1.00, relevancy 0.6118). Poora 20-sawal eval §4 ke steps se PC par chalega. |
-| 8 | Tokens localStorage → httpOnly cookie | ⏳ **PENDING — risk accept karna hoga ya banana hoga.** Tokens abhi bhi localStorage me hain (Sprint 3 se). Localhost-only demo ke liye risk kam hai (koi public URL nahi, koi third-party script nahi), lekin ye production ki sab se bari baqi kamzori hai — Monitoring phase se pehle ya us ke sath karna chahiye. |
-| 9 | Staging smoke 22/22 PASS | ✅ DONE (dobara chalaya — §7) |
+| 1 | Demo passwords changed | ✅ SUPERSEDED — there are no demo accounts in production at all (OFF). There is no need to change demo passwords, because demo login is not possible at all. |
+| 2 | JWT secret set (Production, separate, long random) | ✅ DONE — fresh 64-char secret in `.env.production` (created by the setup script); the server does not start at all on a weak secret. |
+| 3 | Ollama running + llama3.1:8b (real LLM answers) | ⏳ **PC-PENDING** — no Ollama on this VM; answers are in extractive-fallback mode (the mode is written in the response). Steps in §4. |
+| 4 | PgVector tested on Fahad's PC (port 5432) | ⏳ **PC-PENDING** — no Postgres on this VM. Steps in §4. |
+| 5 | English latency decision (re-measure on PC; if > 3 s then cross-encoder fix) | ⏳ **PC-PENDING** — re-measured on this VM: staging 7.26 / 4.51 / 8.38 s (median 7.26 s), target < 3 s still missed. The `RTB_RERANKER=off` flag is ready (§4). |
+| 6 | Arabic garbling + relevancy 0.42 — accept or fix decision | ⏳ **PENDING (Fahad's decision)** — the fix is recreating the PDFs with logical-order Arabic + BGE-M3; neither has happened yet. |
+| 7 | Full 20-question eval on the production env | ⏳ **PC-PENDING** — limit=3 ran in staging (faithfulness 1.00, recall 1.00, relevancy 0.6118). The full 20-question eval will run on the PC via the §4 steps. |
+| 8 | Tokens localStorage → httpOnly cookie | ⏳ **PENDING — the risk must be accepted or it must be built.** Tokens are still in localStorage (since Sprint 3). The risk is low for a localhost-only demo (no public URL, no third-party script), but this is production's largest remaining weakness — it should be done before or with the Monitoring phase. |
+| 9 | Staging smoke 22/22 PASS | ✅ DONE (run again — §7) |
 | 10 | Fresh venv bcrypt 4.0.1 + pytest 81/81 | ✅ DONE (§7) |
 
-**Items 3–8 PC par ya Fahad ke faisle par pending hain — unko DONE
-mat samjho.** Production is liye "local production" hai: hardening
-poori hai, lekin asal LLM, PgVector aur poora eval PC par baqi hai.
+**Items 3–8 are pending on the PC or on Fahad's decision — do not treat them as DONE.**
+Production is "local production" for this reason: hardening is
+complete, but the real LLM, PgVector and the full eval remain on the PC.
 
-## 3. Windows PC par chalana (PowerShell) — step by step
+## 3. Running on a Windows PC (PowerShell) — step by step
 
-**Zaroorat:** Python 3.12+, Node.js 20+, PostgreSQL (optional —
-PgVector test ke liye). Docker **nahi** chahiye.
+**Requirements:** Python 3.12+, Node.js 20+, PostgreSQL (optional —
+for the PgVector test). Docker **not** required.
 
 ```powershell
-# 1. Project folder kholo
+# 1. Open the project folder
 cd riyadh-trust-bank-intelligence
 
-# 2. Dev/staging band karo (ports :8000/:3000 production ke hain)
-.\scripts\production_stop.ps1   # kuch chal raha ho to band karta hai
+# 2. Stop dev/staging (ports :8000/:3000 belong to production)
+.\scripts\production_stop.ps1   # stops anything running
 
-# 3. Production setup (pehli dafa; 5-10 minute — venv + packages + index + build)
-#    Agar Activate.ps1 error de to pehle ye chalao:
+# 3. Production setup (first time; 5-10 minutes — venv + packages + index + build)
+#    If Activate.ps1 gives an error, run this first:
 #    Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 .\scripts\production_setup.ps1
 
-# 4. Pehla admin banao (demo users NAHI bante — ye lazmi hai)
+# 4. Create the first admin (demo users are NOT created — this is mandatory)
 python scripts\create_admin.py --email you@bank.local
-#    Password poochega (min 8 chars, 1 letter + 1 digit). Demo email
-#    (admin@rtb.local) mana hai — woh production me kabhi login nahi karega.
+#    It will ask for a password (min 8 chars, 1 letter + 1 digit). A demo email
+#    (admin@rtb.local) is refused — it will never log in in production.
 
-# 5. Production API start karo — Terminal 1 (foreground, Ctrl+C se band)
+# 5. Start the production API — Terminal 1 (foreground, stop with Ctrl+C)
 .\scripts\production_start.ps1
 # Check: http://127.0.0.1:8000/api/v1/health
 #   -> {"success": true, "data": {"status": "ok", "environment": "production", ...}}
 
-# 6. Web UI start karo — Terminal 2
+# 6. Start the web UI — Terminal 2
 .\scripts\production_start_web.ps1
-# Open: http://localhost:3000  (Sign In page — demo accounts NAHI dikhenge)
+# Open: http://localhost:3000  (Sign In page — demo accounts will NOT be shown)
 
-# 7. Smoke test — Terminal 3 (API chalte hue)
+# 7. Smoke test — Terminal 3 (while the API is running)
 python scripts\production_smoke.py
-#   -> 18/18 PASS hona chahiye
+#   -> 18/18 PASS expected
 
-# 8. Backup (pehli dafa + har upgrade se pehle)
+# 8. Backup (first time + before every upgrade)
 python scripts\backup.py
 ```
 
-Dobara setup karna ho (fresh data): `.\scripts\production_setup.ps1 -Fresh`
-Setup + start ek saath: `.\scripts\production_setup.ps1 -Start`
-Linux (is VM jaisa): `./scripts/production_setup.sh` / `./scripts/production_start.sh` /
+To set up again (fresh data): `.\scripts\production_setup.ps1 -Fresh`
+Setup + start together: `.\scripts\production_setup.ps1 -Start`
+Linux (like this VM): `./scripts/production_setup.sh` / `./scripts/production_start.sh` /
 `./scripts/production_start_web.sh` / `python scripts/production_smoke.py` — same steps.
-Venv `~/rtb-prod-venv` me banta hai (project ke andar nahi).
+The venv is created in `~/rtb-prod-venv` (not inside the project).
 
-**Admin login:** wohi email/password jo step 4 me banaya tha.
-Naye users Sign Up se bante hain (hamesha Customer Service role);
-zyada access Admin panel se role badal kar deta hai.
+**Admin login:** the same email/password created in step 4.
+New users are created via Sign Up (always the Customer Service role);
+higher access is granted by changing the role in the Admin panel.
 
-## 4. Fahad ke PC par karne wale steps (PC-only — is VM par NAHI hue)
+## 4. Steps to do on Fahad's PC (PC-only — NOT done on this VM)
 
-Ye checklist PC par poori karni hai. Har item ke saath command di hai:
+This checklist must be completed on the PC. Each item includes its command:
 
-- [ ] **Ollama + llama3.1:8b install karo (Windows):**
-  1. https://ollama.com/download se Ollama Windows installer chalao.
-  2. `ollama pull llama3.1:8b` (pehli dafa ~4.7 GB download — waqt lagega).
-  3. `.env.production` me line uncomment karo: `OLLAMA_HOST=http://127.0.0.1:11434`
-  4. API restart karo. Phir chat karo — jawab ke `generation_mode` me
-     `ollama` aana chahiye (extractive-fallback ki jagah).
-  5. Check: `curl http://127.0.0.1:11434/api/tags` — model list me
-     `llama3.1:8b` dikhna chahiye.
+- [ ] **Install Ollama + llama3.1:8b (Windows):**
+  1. Run the Ollama Windows installer from https://ollama.com/download.
+  2. `ollama pull llama3.1:8b` (first time ~4.7 GB download — it will take time).
+  3. Uncomment this line in `.env.production`: `OLLAMA_HOST=http://127.0.0.1:11434`
+  4. Restart the API. Then chat — the answer's `generation_mode` should
+     show `ollama` (instead of extractive-fallback).
+  5. Check: `curl http://127.0.0.1:11434/api/tags` — `llama3.1:8b` should
+     appear in the model list.
 - [ ] **PgVector test (PostgreSQL port 5432):**
-  1. PostgreSQL chal raha ho to: `createdb rtb_intelligence_prod`
-  2. `.env.production` me SQLite line comment karo, ye uncomment karo:
+  1. If PostgreSQL is running: `createdb rtb_intelligence_prod`
+  2. Comment the SQLite line in `.env.production`, uncomment this:
      `DATABASE_URL=postgresql://postgres:<password>@localhost:5432/rtb_intelligence_prod`
-  3. `python scripts\seed_users.py --postgres` — sirf mirror hai, asal store
-     abhi bhi JSON hai (Design ka Postgres users table future deployment
-     ke liye hai). PgVector store ko `RTB_USE_PGVECTOR=1` se on karke
-     `python scripts\index_chunks.py` dobara chalao, phir search test:
-     `python scripts\search_test.py` — 3/3 PASS hona chahiye.
-  4. Agar Postgres na chale to SQLite wala setup hi production hai —
-     app bina Postgres ke chalta hai (health me `database` batata hai).
-- [ ] **English latency dobara napo + cross-encoder faisla:**
-  1. Pehle normal mode me 3 English sawal poocho, waqt napo
-     (smoke test bhi 3 timed chats deta hai).
-  2. Phir `.env.production` me `RTB_RERANKER=off` set karo, API restart
-     karo, wohi 3 sawal dobara poocho.
-  3. Faisla: agar `off` par latency < 3 s ho aur jawab abhi bhi sahi
-     citations ke sath aaye, to production me `off` hi rakho (relevancy
-     par farq check karo — eval se). Agar `off` par jawab kharab ho,
-     to `auto` wapas karo aur 4–8 s accept karo (portfolio demo me
-     likh do ke cross-encoder ki wajah se hai).
-- [ ] **Poora 20-sawal eval production data par:**
-  `python scripts\run_eval.py` (Admin token chahiye — ~2 minute).
+  3. `python scripts\seed_users.py --postgres` — only a mirror, the real store
+     is still JSON (the Postgres users table in the Design is for a future deployment).
+     Turn the PgVector store on with `RTB_USE_PGVECTOR=1`, run
+     `python scripts\index_chunks.py` again, then the search test:
+     `python scripts\search_test.py` — 3/3 PASS expected.
+  4. If Postgres does not run, the SQLite setup is production —
+     the app runs without Postgres (health reports `database`).
+- [ ] **Re-measure English latency + cross-encoder decision:**
+  1. First ask 3 English questions in normal mode, measure the time
+     (the smoke test also gives 3 timed chats).
+  2. Then set `RTB_RERANKER=off` in `.env.production`, restart the API,
+     ask the same 3 questions again.
+  3. Decision: if latency is < 3 s with `off` and the answers still arrive with correct
+     citations, keep `off` in production (check the impact on relevancy — via eval).
+     If the answers are poor with `off`, return to `auto` and accept 4–8 s (write in the
+     portfolio demo that it is due to the cross-encoder).
+- [ ] **Full 20-question eval on production data:**
+  `python scripts\run_eval.py` (an Admin token is required — ~2 minutes).
   Targets: faithfulness ≥ 0.85, context_recall ≥ 0.80,
-  answer_relevancy ≥ 0.85 (MiniLM ki wajah se 0.42–0.61 expected hai —
-  ye BGE-M3 + asal LLM se hi theek hoga; eval report me waisa hi likho).
-- [ ] **Arabic garbling faisla:** Arabic jawab me numbers/clauses galat
-  order me aate hain (Sprint 1 se known). Fix = source PDFs ko
-  logical-order Arabic se dobara banana (`scripts/generate_docs.py`).
-  Ya accept karo aur portfolio me limitation ke tor par likh do.
-- [ ] **httpOnly cookies (checklist item 8):** tokens abhi localStorage
-  me hain. Fix ke liye backend ko `Set-Cookie: HttpOnly` se token dena
-  hoga aur frontend ko `credentials: 'include'` se bhejna hoga — ye
-  Monitoring phase se pehle ka kaam hai. Localhost-only demo me risk
-  kam hai, lekin "production-ready" ke daawe ke liye ye baqi hai.
-- [ ] **Backup schedule:** hafte me ek dafa `python scripts\backup.py`
-  chalao (ya Task Scheduler se). Backups `backups/` me rehte hain
-  (last 7). `.env.production` ka backup ALAG se rakho (wo zip me
-  nahi jata — secret leak se bachne ke liye) — ek safe jagah par
-  copy kar ke rakho, warna secret kho gaya to saare tokens invalid
-  ho jayenge (dobara secret banao to purane login dobara karne honge).
+  answer_relevancy ≥ 0.85 (0.42–0.61 is expected due to MiniLM —
+  this will only be fixed with BGE-M3 + a real LLM; write it that way in the eval report).
+- [ ] **Arabic garbling decision:** in Arabic answers, numbers/clauses appear in the wrong
+  order (known since Sprint 1). The fix is recreating the source PDFs with
+  logical-order Arabic (`scripts/generate_docs.py`).
+  Or accept it and write it in the portfolio as a limitation.
+- [ ] **httpOnly cookies (checklist item 8):** tokens are still in localStorage.
+  For the fix, the backend must provide the token via `Set-Cookie: HttpOnly`
+  and the frontend must send it with `credentials: 'include'` — this is
+  work before the Monitoring phase. The risk is low in a localhost-only demo,
+  but it remains for a "production-ready" claim.
+- [ ] **Backup schedule:** run `python scripts\backup.py` once a week
+  (or via Task Scheduler). Backups remain in `backups/`
+  (last 7). Keep a backup of `.env.production` SEPARATELY (it does not go into
+  the zip — to avoid a secret leak) — keep a copy in a safe place,
+  otherwise if the secret is lost all tokens will become invalid
+  (if you create the secret again, the old logins will need to be done again).
 
 ## 5. Backup & restore + rollback + runbook
 
@@ -187,9 +186,9 @@ Ye checklist PC par poori karni hai. Har item ke saath command di hai:
 ```powershell
 python scripts\backup.py            # backups\rtb-prod-backup-YYYYMMDD-HHMMSS.zip
 ```
-Zip me hota hai: `users.json`, `audit.jsonl`, conversations, feedback,
+The zip contains: `users.json`, `audit.jsonl`, conversations, feedback,
 refresh tokens, docs manifest, chunks, vector store. **`.env` files
-kabhi zip me nahi jate** (secret alag se sambhalo).
+never go into the zip** (keep the secret separately).
 
 ### Restore
 ```powershell
@@ -197,57 +196,53 @@ kabhi zip me nahi jate** (secret alag se sambhalo).
 python scripts\restore.py --backup backups\rtb-prod-backup-20261106-120000.zip --force
 .\scripts\production_start.ps1
 ```
-`--force` ke baghair restore mana hai (data-prod/ pehle se hai).
-Restore se pehle hamesha pre-restore backup banta hai
-(`backups\rtb-pre-restore-<stamp>.zip`) — galat restore bhi wapas
-ho sakta hai.
+Restore is refused without `--force` (data-prod/ already exists).
+A pre-restore backup is always created before restore
+(`backups\rtb-pre-restore-<stamp>.zip`) — even a wrong restore can be reversed.
 
-### Rollback (production se staging/dev par wapas)
-1. Production band karo: `.\scripts\production_stop.ps1`
-2. Staging chalao: `.\scripts\staging_start.ps1` (API :8001) +
-   staging web `:3001` — staging data (`data-staging/`) production
-   se kabhi nahi mila, waisa ka waisa hai.
-3. Code rollback: is version se pehle wala zip
-   `Project-1-Frontend-v0.7.zip` se restore karo (v0.7 code wahi hai
-   jo live smoke 13/13 pass tha). Production-only additions
-   (hardening/scripts) us zip me nahi hain — rollback ke baad dobara
-   v0.8 setup chalana hoga.
-4. Secret leak hua to: `.env.production` delete karo, dobara setup
-   chalao — naya random secret ban jayega. **Purane tokens turant
-   invalid ho jayenge** (sab users dobara login karenge) — yehi
-   sahi behavior hai. `.env.production` kabhi git ya zip me nahi jata.
+### Rollback (back from production to staging/dev)
+1. Stop production: `.\scripts\production_stop.ps1`
+2. Run staging: `.\scripts\staging_start.ps1` (API :8001) +
+   staging web `:3001` — staging data (`data-staging/`) never mixes with production,
+   it remains as it was.
+3. Code rollback: restore from the previous version zip
+   `Project-1-Frontend-v0.7.zip` (v0.7 code is the one whose live smoke passed 13/13).
+   The production-only additions (hardening/scripts) are not in that zip — after rollback
+   the v0.8 setup will need to be run again.
+4. If a secret leaks: delete `.env.production`, run setup again — a new random secret
+   will be generated. **Old tokens will immediately become invalid**
+   (all users will log in again) — this is correct behavior. `.env.production` never goes into git or zip.
 
-### Runbook — masla ho to kya karein
-| Masla | Kya karein |
+### Runbook — what to do if there is a problem
+| Problem | What to do |
 |---|---|
-| API start nahi hota: "PRODUCTION REFUSED TO START" | Message parho — ya to SECRET_KEY weak/placeholder hai (setup dobara chalao ya `python -c "import secrets; print(secrets.token_urlsafe(64))"` se naya banao), ya CORS me `*` hai (sirf `http://localhost:3000` rakho). |
-| Port 8000 busy ("address already in use") | Dev ya purani production abhi bhi chal rahi hai. `.\scripts\production_stop.ps1` chalao, phir dobara start karo. |
-| Login page par "Demo accounts" dikh rahe hain | Production API nahi chal rahi — browser staging/dev API se baat kar raha hai. Check karo ke `:8000` par environment `production` hai (`/api/v1/health`). |
-| Login 429 "Too many attempts" | 5 ghalat password ek minute me — 60 second ruko, phir koshish karo. (Admin bhi is se nahi bachta — brute-force rokne ke liye hai.) |
-| Chat slow hai (English 4–8 s) | Known — cross-encoder + RAM. §4 ka `RTB_RERANKER=off` test karo. |
-| Server band ho gaya (crash) | Terminal me error dekho, phir `.\scripts\production_start.ps1` se dobara chalao. Data `data-prod/` me safe hai — restart se kuch nahi mit-ta. Agar data kharab lage to backup se restore karo (upar). |
-| Users bhool gaye password | Abhi password reset flow nahi hai (FRONTEND.md §11). Admin `scripts/create_admin.py --email <same-email> --force` se user dobara bana sakta hai (purana role khatam ho jayega — phir Admin panel se role dobara set karo). |
-| Health check karna ho | `python scripts\healthcheck.py` — exit 0 = healthy, 1 = masla hai. |
+| API does not start: "PRODUCTION REFUSED TO START" | Read the message — either SECRET_KEY is weak/placeholder (run setup again or create a new one with `python -c "import secrets; print(secrets.token_urlsafe(64))"`), or CORS contains `*` (keep only `http://localhost:3000`). |
+| Port 8000 busy ("address already in use") | Dev or the old production is still running. Run `.\scripts\production_stop.ps1`, then start again. |
+| "Demo accounts" shown on the login page | The production API is not running — the browser is talking to the staging/dev API. Check that the environment on `:8000` is `production` (`/api/v1/health`). |
+| Login 429 "Too many attempts" | 5 wrong passwords in one minute — wait 60 seconds, then try again. (Admin is not exempt from this — it is to stop brute-force.) |
+| Chat is slow (English 4–8 s) | Known — cross-encoder + RAM. Try the `RTB_RERANKER=off` test in §4. |
+| Server stopped (crash) | See the error in the terminal, then run it again with `.\scripts\production_start.ps1`. Data is safe in `data-prod/` — a restart deletes nothing. If the data looks corrupt, restore from a backup (above). |
+| Users forgot their password | There is no password reset flow yet (FRONTEND.md §11). Admin can recreate a user with `scripts/create_admin.py --email <same-email> --force` (the old role will be lost — then set the role again from the Admin panel). |
+| Need to check health | `python scripts\healthcheck.py` — exit 0 = healthy, 1 = there is a problem. |
 
-### Monitoring hooks (Monitoring phase ke liye taiyar)
-- `/api/v1/health` extended hai (§1 item 11) — uptime, vector store,
-  embeddings, generation mode sab batata hai.
-- `scripts/healthcheck.py` exit 0/1 deta hai — Windows Task Scheduler
-  ya cron se har 5 minute chalao aur fail hone par alert karo.
-- Logs: uvicorn console par likhta hai (terminal me). File logging /
-  rotation abhi nahi hai — Monitoring phase me `logs/` + rotation
-  aayega. Tab tak API terminal ko band mat karo (us me logs hain).
-- Koi external monitoring service nahi (budget $0).
+### Monitoring hooks (ready for the Monitoring phase)
+- `/api/v1/health` is extended (§1 item 11) — it reports uptime, vector store,
+  embeddings, generation mode.
+- `scripts/healthcheck.py` gives exit 0/1 — run it every 5 minutes via Windows Task Scheduler
+  or cron and alert on failure.
+- Logs: uvicorn writes to the console (in the terminal). File logging /
+  rotation is not there yet — in the Monitoring phase `logs/` + rotation
+  will arrive. Until then do not close the API terminal (it contains the logs).
+- No external monitoring service (budget $0).
 
-## 6. v0.8 me kya badla (vs v0.7)
+## 6. What changed in v0.8 (vs v0.7)
 
 - `backend/app/core/config.py`: version **0.8.0**; `demo_accounts_enabled`
   (`RTB_DEMO_ACCOUNTS`), `debug`, `reranker_mode` (`RTB_RERANKER`);
   `validate_production_settings()` — production fail-fast.
 - `backend/app/core/rate_limit.py` (NEW): in-memory sliding window
   (login 5 failed/min, register 3/min, per IP+email, 429 + Retry-After).
-- `backend/app/core/users.py`: `seed_users()` demo flag off ho to kuch
-  nahi karta; `DEMO_EMAILS` set.
+- `backend/app/core/users.py`: `seed_users()` does nothing if the demo flag is off; `DEMO_EMAILS` set.
 - `backend/app/api/v1/auth.py`: demo login block + rate limiting
   (login/register), 429 envelope.
 - `backend/app/api/v1/documents.py`: 10 MB upload limit (streaming,
@@ -255,7 +250,7 @@ ho sakta hai.
 - `backend/app/main.py`: security headers middleware; extended `/health`
   (`_health_extras()` — file reads only).
 - `backend/app/services/retrieval.py`: `RTB_RERANKER=off` support.
-- `frontend/src/pages/Login.tsx`: demo section `/health` se gate;
+- `frontend/src/pages/Login.tsx`: demo section gated from `/health`;
   `frontend/src/api/client.ts`: `HealthResponse` extended type.
 - `frontend/.env.production` (NEW): prod build API URL.
 - `.env.production.example` (NEW), `scripts/create_admin.py`,
@@ -268,38 +263,38 @@ ho sakta hai.
 - README.md: status + Production section; `.gitignore`:
   `.env.production`, `data-prod/`, `backups/`.
 
-## 7. Is VM par live verification (2026-11-06, asal output)
+## 7. Live verification on this VM (2026-11-06, actual output)
 
 ### Fresh prod venv
-- `~/rtb-prod-venv` — `backend/requirements.txt` se banaya.
+- `~/rtb-prod-venv` — created from `backend/requirements.txt`.
 - **bcrypt 4.0.1** ✓ (TESTING BUG-1 pin), fastapi 0.115.0, torch 2.15.0+cpu.
-- Note: pehli setup koshish `.env.production` ki aik line par fail hui —
-  `DATABASE_URL=<redacted>` (unquoted `<`/`>`) shell sourcing me
-  syntax error deta hai. Fix: value quotes me ki
+- Note: the first setup attempt failed on one line of `.env.production` —
+  `DATABASE_URL=<redacted>` (unquoted `<`/`>`) gives a syntax error in shell sourcing.
+  Fix: the value was put in quotes
   (`DATABASE_URL="sqlite:///./rtb_intelligence_prod.db"`); PowerShell
-  loaders bhi quotes strip karte hain. Dobara setup chala to **DONE**.
+  loaders also strip quotes. When setup ran again it was **DONE**.
 
 ### Production setup
-- `.env.production` bana, fresh 64-char SECRET_KEY generate hua (gitignored).
-- `data-prod/`: 8 PDFs copy → ingestion **15 chunks** → index
-  (all-MiniLM-L6-v2, 384-dim — BGE-M3 wahi honest fallback).
-- **Demo users seed NAHI hue** — setup ke baad `data-prod/users.json`
-  maujood hi nahi thi (pehle admin banane se pehle check kiya).
+- `.env.production` created, fresh 64-char SECRET_KEY generated (gitignored).
+- `data-prod/`: 8 PDFs copied → ingestion **15 chunks** → index
+  (all-MiniLM-L6-v2, 384-dim — BGE-M3, the same honest fallback).
+- **Demo users were NOT seeded** — after setup `data-prod/users.json`
+  did not exist at all (checked before creating the first admin).
 - Frontend prod build **PASS** (vite 5.4.21, 47 modules, 2.47 s,
-  `dist/` — bundle me `127.0.0.1:8000` baked in, verify kiya).
+  `dist/` — the bundle has `127.0.0.1:8000` baked in, verified).
 
 ### create_admin
-- `prod-admin@rtb.local` → ADMIN bana ✓.
+- `prod-admin@rtb.local` → ADMIN created ✓.
 - Demo email `admin@rtb.local` → **refused** ("demo account address") ✓.
 - Duplicate email → **refused** ("already exists — use --force") ✓.
 
 ### Pytest (staging venv, dev defaults)
-- **81 passed, 0 failed** (69 purane + 12 naye `tests/test_production.py`).
-  Rate limiting ne purane tests nahi tode (limiter per IP+email hai,
-  sirf failed logins ginta hai).
+- **81 passed, 0 failed** (69 old + 12 new `tests/test_production.py`).
+  Rate limiting did not break the old tests (the limiter is per IP+email,
+  it counts only failed logins).
 
 ### Live production API (:8000, ENV=production)
-Health (asal output):
+Health (actual output):
 ```json
 {"status": "ok", "service": "Riyadh Trust Bank — Enterprise Intelligence Platform",
  "version": "0.8.0", "environment": "production", "uptime_seconds": 6.24,
@@ -310,7 +305,7 @@ Health (asal output):
 ```
 Headers (curl): `x-content-type-options: nosniff`,
 `x-frame-options: DENY`, `referrer-policy: no-referrer` ✓ —
-**koi `server` header nahi** (uvicorn `--no-server-header`) ✓.
+**no `server` header** (uvicorn `--no-server-header`) ✓.
 `scripts/healthcheck.py` → `HEALTHY ... env=production version=0.8.0` **exit 0** ✓.
 
 ### Production smoke — `scripts/production_smoke.py` → **18/18 PASS, 0 FAIL**
@@ -325,65 +320,64 @@ Headers (curl): `x-content-type-options: nosniff`,
 | 14 | RBAC: service AML → refused, 0 citations | PASS (refused=True, mode=rbac-refusal) |
 | 15–16 | rate limit: 6th wrong login → 429, Retry-After=60 | PASS ([401×5, 429]) |
 | 17 | metrics 200 + env=production | PASS |
-| 18 | smoke user cleanup (data-prod se delete) | PASS |
+| 18 | smoke user cleanup (deleted from data-prod) | PASS |
 
-Pehli smoke run 17/18 thi — RBAC check ka **ek FAIL meri smoke
-script ki ghalti tha, app ki nahi**: script ne `data.mode` parha jo
-field maujood hi nahi (sahi field `generation_mode` hai), aur staging
-se alag sawal poocha tha ("AML policy for high-risk customers?").
-Us sawal par asal jawab dekha: **5 citations, sab RETAIL**
-(KYC/Loan/Account Opening) — **koi COMPLIANCE citation nahi, koi
-leak nahi**. Wajah: KYC Policy me high-risk customers ka zikr hai,
-is liye allowed retrieval strong tha aur RBAC-blocked detector
-trigger nahi hua. Staging wala sawal ("What is the AML reporting
-threshold?") production me bhi **refuse** hota hai (dobara smoke:
-18/18 PASS). Ye detector ka pehle se maujood, sawal par munhasir
-behavior hai (Sprint 4) — production regression nahi. Lekin note
-karo: **RBAC refusal har AML-jaisi phrasing par guaranteed nahi
-hai** — jo sawal RETAIL content se overlap kare (jaise high-risk
-customers), us ka grounded RETAIL-only jawab milta hai, refusal
-nahi. Citation me kabhi disallowed document nahi aata — ye security
-property har test me qaim rahi (23 RBAC unit tests + journeys +
+The first smoke run was 17/18 — **one FAIL in the RBAC check was my smoke
+script's error, not the app's**: the script read `data.mode`, a field that does not exist
+(the correct field is `generation_mode`), and asked a different question from staging
+("AML policy for high-risk customers?").
+On that question the actual answer seen was: **5 citations, all RETAIL**
+(KYC/Loan/Account Opening) — **no COMPLIANCE citation, no leak**.
+Reason: the KYC Policy mentions high-risk customers, so the allowed retrieval was strong
+and the RBAC-blocked detector did not trigger. The staging question ("What is the AML reporting
+threshold?") is also **refused** in production (smoke run again:
+18/18 PASS). This is the detector's pre-existing, question-dependent
+behavior (Sprint 4) — not a production regression. But note:
+**RBAC refusal is not guaranteed on every AML-like phrasing**
+— a question that overlaps RETAIL content (such as high-risk
+customers) receives a grounded RETAIL-only answer, not a refusal.
+A disallowed document never appears in citations — this security
+property held in every test (23 RBAC unit tests + journeys +
 smoke).
 
 ### Upload limit (live, curl)
-- Admin token se 11 MB PDF upload → **HTTP 413** ("File too large —
-  maximum upload size is 10 MB"), file disk par save **nahi** hui,
-  admin ko documents abhi bhi 8 dikhte hain ✓.
+- With an admin token, an 11 MB PDF upload → **HTTP 413** ("File too large —
+  maximum upload size is 10 MB"), the file was **not** saved to disk,
+  the admin still sees 8 documents ✓.
 
 ### Backup / restore (live)
 - `python scripts/backup.py` → `backups/rtb-prod-backup-20261105-215752.zip`
   (**17 files, 0.34 MB**) ✓.
-- Restore test (alag dir `/tmp/rtb-restore-test` me, data-prod ko
-  chhede baghair): **17 files restore** hue, users me sirf
-  `prod-admin@rtb.local` ✓. Test dir phir delete kar di.
+- Restore test (in a separate dir `/tmp/rtb-restore-test`, without touching data-prod):
+  **17 files restored**, users contained only
+  `prod-admin@rtb.local` ✓. The test dir was then deleted.
 
 ### Frontend preview (:3000)
 - `npx vite preview --port 3000` → `http://localhost:3000/` **HTTP 200** ✓.
-- Bundle me `demo_accounts_enabled` gating + `127.0.0.1:8000` verify kiya ✓.
+- The bundle was verified for `demo_accounts_enabled` gating + `127.0.0.1:8000` ✓.
 
-### Regression — staging smoke dobara
+### Regression — staging smoke run again
 - Staging API :8001 + `scripts/staging_smoke.py` → **22/22 PASS**
-  (pehle run 21/22 tha — sirf hardcoded version pin 0.6.0 fail hua
-  tha, version ab 0.8.0 hai; pin update kar ke dobara chalaya to
-  22/22). English latency dobara napi: **7.26 / 4.51 / 8.38 s,
-  median 7.26 s** — target < 3 s abhi bhi miss (is VM par).
-  Dev `data/audit.jsonl` staging smoke se untouched ✓.
+  (the first run was 21/22 — only the hardcoded version pin 0.6.0 failed,
+  the version is now 0.8.0; after updating the pin and running again,
+  22/22). English latency re-measured: **7.26 / 4.51 / 8.38 s,
+  median 7.26 s** — target < 3 s still missed (on this VM).
+  Dev `data/audit.jsonl` untouched by staging smoke ✓.
 
-## 8. Production ki honest limits (ye sab pehle jaisa hi hai)
+## 8. Honest limits of Production (all the same as before)
 
-1. **English latency 4–8 s** — target < 3 s miss (is VM par).
-2. **Generation extractive-fallback** — is VM par Ollama nahi hai.
+1. **English latency 4–8 s** — target < 3 s missed (on this VM).
+2. **Generation extractive-fallback** — no Ollama on this VM.
 3. **Embeddings MiniLM (384-dim)** — BGE-M3 fallback.
-4. **Arabic visual-order garbling** aur **relevancy 0.42–0.61**.
-5. **Tokens localStorage me** — httpOnly cookie abhi baki hai (item 8).
-6. **SQLite file inert hai** — asal stores JSONL files hain; PgVector
-   test PC par baqi hai.
-7. **Rate limiter in-memory, per-process hai** — production single
-   worker chalata hai, is liye limit qaim rehti hai. `--workers > 1`
-   mat chalao (shared store nahi hai).
-8. **RBAC-blocked refusal sawal par munhasir hai** (§7 — leak kabhi
-   nahi, lekin har AML-jaisi phrasing par refusal nahi milta).
-9. **Koi file logging / rotation nahi** — logs API terminal par hain.
-10. **Koi HTTPS nahi** — localhost-only demo hai; public URL par
-    chalane se pehle reverse proxy + TLS + httpOnly cookies lazmi hain.
+4. **Arabic visual-order garbling** and **relevancy 0.42–0.61**.
+5. **Tokens in localStorage** — the httpOnly cookie is still remaining (item 8).
+6. **SQLite file is inert** — the real stores are JSONL files; the PgVector
+   test remains on the PC.
+7. **Rate limiter is in-memory, per-process** — production runs a single
+   worker, so the limit holds. Do not run `--workers > 1`
+   (there is no shared store).
+8. **RBAC-blocked refusal is question-dependent** (§7 — never a leak,
+   but refusal is not given on every AML-like phrasing).
+9. **No file logging / rotation** — logs are on the API terminal.
+10. **No HTTPS** — a localhost-only demo; before running on a public URL,
+    a reverse proxy + TLS + httpOnly cookies are mandatory.

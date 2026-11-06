@@ -1,50 +1,51 @@
 # Landing Fix v0.9.1 — blank/faint landing page on Fahad's PC
 
-## Bug kya tha (Fahad ki photo se evidence)
+## What the bug was (evidence from Fahad's photo)
 
-Fahad ne apne laptop ki photo bheji (2026-11-06, `localhost:3000`, tab: "Riyadh Trust
+Fahad sent a photo of his laptop (2026-11-06, `localhost:3000`, tab: "Riyadh Trust
 Bank — Enterprise"):
 
-- Hero section ki **navy background nahi dikh rahi** — poora page safed hai.
-- Heading **"Bank knowledge, answered with proof." bilkul nahi dikh rahi**.
-- Stats ke **numbers (8, 15, 24, 3) nahi dikh rahe** — sirf halke labels
-  ("Indexed documents", "Searchable sections (chunks)" …) faint dikhte hain.
-- "What the platform does" heading neeche dikh rahi hai — matlab page load hua,
-  React chala, sirf hero ke colours gayab hain.
+- The hero section's **navy background was not visible** — the entire page was white.
+- The heading **"Bank knowledge, answered with proof." was not visible at all**.
+- The stats **numbers (8, 15, 24, 3) were not visible** — only the faint labels
+  ("Indexed documents", "Searchable sections (chunks)" …) were faintly visible.
+- The "What the platform does" heading was visible further down the page — meaning
+  the page had loaded and React was running; only the hero colours were missing.
 
-Ye EXACTLY **white-on-white** hai: safed text (`text-white` heading/numbers) safed
-background par gayab, halka slate text (`text-slate-300` paragraph/labels) faint.
+This is EXACTLY **white-on-white**: white text (`text-white` heading/numbers)
+invisible on a white background, and light slate text (`text-slate-300`
+paragraph/labels) faint.
 
-## Asal wajah (proof ke sath)
+## Root cause (with proof)
 
-Is VM par build **sahi** hai — is liye code ka bug nahi, Fahad ke PC par **stale
-build ya CSS na load hona** hai:
+The build on this VM is **correct** — so this is not a code bug; it is a **stale
+build or CSS not loading** on Fahad's PC:
 
-1. `frontend/dist/assets/*.css` me `.bg-navy-900` rule sahi hai
-   (`background-color: rgb(11 44 74)`), Tailwind v3 config me navy/gold/teal
-   defined hain, `Landing.tsx` code sahi hai.
-2. **Live proof (is fix ke baad, isi VM par):** production build + API :8000 +
-   frontend preview :3000 chalaye, headless Chrome se screenshot liya —
-   `docs/screenshots/06-landing-fixed.png`. Computed styles probe:
+1. `frontend/dist/assets/*.css` contains the correct `.bg-navy-900` rule
+   (`background-color: rgb(11 44 74)`), the Tailwind v3 config defines
+   navy/gold/teal, and the `Landing.tsx` code is correct.
+2. **Live proof (after this fix, on this VM):** the production build + API :8000 +
+   frontend preview :3000 were run, and a screenshot was taken with headless
+   Chrome — `docs/screenshots/06-landing-fixed.png`. Computed styles probe:
    - hero background `rgb(11, 44, 74)` = `#0b2c4a` navy ✅
    - h1 colour `rgb(255, 255, 255)`, text "Bank knowledge, answered with proof." ✅
    - gold button background `rgb(201, 162, 39)` = `#c9a227`, text `#071f36` ✅
    - footer background `rgb(7, 31, 54)` ✅
    - stats `['8', '15', '24', '3']` ✅, version badge `v0.9.1` visible ✅
-   - Screenshot me sab kuch aankh se bhi dikhta hai — navy hero, safed heading,
-     gold button, stats, footer.
-3. Is liye Fahad ke PC par jo chal raha tha wo **ye build nahi thi** — sab se
-   likely: purani zip ka `dist/` ya purana dev server chal raha tha, ya browser
-   ne purani CSS cache se li. (Ho sakta hai usne v0.9 zip extract kiya ho lekin
-   `npm run build` dobara na chalaya ho, ya browser tab purana khula ho.)
+   - Everything is also visible to the eye in the screenshot — navy hero, white
+     heading, gold button, stats, footer.
+3. Therefore what was running on Fahad's PC was **not this build** — most
+   likely: the old zip's `dist/` or an old dev server was still running, or the
+   browser loaded old CSS from cache. (He may have extracted the v0.9 zip but
+   not re-run `npm run build`, or the browser tab was an old one.)
 
-## Fix kya kiya (code bulletproof banaya — sirf "cache clear karo" nahi kaha)
+## What the fix did (made the code bulletproof — not just "clear the cache")
 
-Sirf cache clear karne ko kehna kaafi nahi tha. Ab critical colours Tailwind par
-depend nahi karte:
+Simply asking him to clear the cache was not enough. The critical colours no
+longer depend on Tailwind:
 
-1. **Plain-CSS fallback** — `frontend/src/index.css` me plain classes (Tailwind
-   ke SATH lagti hain, `!important` ke sath):
+1. **Plain-CSS fallback** — `frontend/src/index.css` now has plain classes
+   (applied ALONGSIDE Tailwind, with `!important`):
    - `.hero-bg` → `background-color: #0b2c4a` (hero section)
    - `.hero-bg h1` → white; `.hero-sub` / `.hero-stat-label` → `#cbd5e1`;
      `.hero-stat-value` → white; `.hero-kicker` → gold
@@ -52,68 +53,69 @@ depend nahi karte:
    - `.hero-outline-btn` → white border + white text
    - `.footer-bg` → `#071f36`, `.footer-title` → white
    - `.dark-btn` → navy bg + white text (Sign in / Create account buttons)
-   - `Landing.tsx`, `Login.tsx`, `Register.tsx` me ye classes Tailwind classes
-     ke sath lagayi gayi hain. Ek fail ho to doosri bachaye. Koi aur page nahi
-     chheda.
-2. **Version badge** — hero me "Build v0.9.1 — landing fix" aur footer me
-   "v0.9.1", taake Fahad dekh sake konsi build chal rahi hai. Version bump
-   0.9.1 (`backend/app/core/config.py`, `tests/test_health.py`, dono smoke
-   scripts).
-3. **Verify** — upar § "Asal wajah" point 2 dekho: real headless-Chrome screenshot
-   + computed-style probe, sab PASS.
+   - These classes were added in `Landing.tsx`, `Login.tsx`, and
+     `Register.tsx` alongside the Tailwind classes. If one fails, the other
+     protects the colours. No other page was touched.
+2. **Version badge** — "Build v0.9.1 — landing fix" in the hero and
+   "v0.9.1" in the footer, so Fahad can see which build is running. Version
+   bump to 0.9.1 (`backend/app/core/config.py`, `tests/test_health.py`, and
+   both smoke scripts).
+3. **Verify** — see § "Root cause", point 2 above: a real headless-Chrome
+   screenshot + computed-style probe, all PASS.
 
 ## Verify results
 
-- Pytest: **99 passed, 0 failed** (prod venv, ~173s) — koi backend change nahi,
-  lekin poora suite dobara green.
+- Pytest: **99 passed, 0 failed** (prod venv, ~173s) — no backend change,
+  but the full suite was re-run and is green.
 - Frontend builds: dev `npm run build` PASS (2.67s), staging mode PASS (2.49s),
   zero tsc errors.
-- Built CSS me `.hero-bg{background-color:#0b2c4a!important}` maujood (grep se
-  verify), JS bundle me `v0.9.1`.
+- The built CSS contains `.hero-bg{background-color:#0b2c4a!important}`
+  (verified by grep), and the JS bundle contains `v0.9.1`.
 - Live prod: API :8000 health `version 0.9.1, environment production,
   demo_accounts_enabled false`; web :3000 HTTP 200; screenshot
   `docs/screenshots/06-landing-fixed.png`.
 
-## Fahad ke liye EXACT steps (Windows)
+## EXACT steps for Fahad (Windows)
 
-Ye steps **lazmi** hain — purani build se naya fix nahi aayega:
+These steps are **mandatory** — the new fix will not arrive from the old build:
 
-1. Browser aur terminal band karo. Jo server chal raha ho usko roko (Ctrl+C).
-2. **Purana project folder DELETE karo** (ya naya naam do, jaise
-   `riyadh-trust-bank-intelligence-OLD`). Purane folder ke upar extract mat karo
-   — purana `dist/` aur `node_modules/` reh jata hai, yehi bug ki wajah hai.
-3. Naya zip `Project-1-LandingFix-v0.9.1.zip` extract karo.
-4. PowerShell me project folder me jao, phir:
+1. Close the browser and terminal. Stop any server that is running (Ctrl+C).
+2. **DELETE the old project folder** (or rename it, for example
+   `riyadh-trust-bank-intelligence-OLD`). Do not extract over the old folder
+   — the old `dist/` and `node_modules/` remain, and that is the cause of
+   this bug.
+3. Extract the new zip `Project-1-LandingFix-v0.9.1.zip`.
+4. In PowerShell, go to the project folder, then:
    ```powershell
    cd frontend
    npm install
    npm run build
    ```
-   `npm run build` ke baad `dist` folder banna chahiye.
-5. Production start karo (project root se):
+   After `npm run build`, the `dist` folder must exist.
+5. Start production (from the project root):
    ```powershell
    .\scripts\production_start.ps1
    ```
-   Doosri PowerShell window me:
+   In a second PowerShell window:
    ```powershell
    .\scripts\production_start_web.ps1
    ```
-   (Ya dono ke `.sh` nahi — Windows par `.ps1` wale chalao.)
-6. Browser me `http://localhost:3000` kholo, phir **Ctrl+F5** (hard refresh —
-   cache bypass). Sirf F5 nahi, **Ctrl+F5**.
-7. **Check karo:** neeche footer me **v0.9.1** likha hona chahiye, aur hero ke
-   neeche "Build v0.9.1 — landing fix". Agar v0.9.1 nahi dikh raha to samjho
-   purani build hi chal rahi hai — step 2 se dobara karo.
-8. Agar phir bhi safed dikhe to: **F12** dabao → **Network** tab → page reload
-   karo → `index-*.css` wali line dekho: **200** honi chahiye. Agar **404** ya
-   **failed** hai to uska screenshot bhejo — phir masla serve karne ka hai, code
-   ka nahi.
+   (Do not use the `.sh` files — on Windows, run the `.ps1` ones.)
+6. Open `http://localhost:3000` in the browser, then press **Ctrl+F5** (hard
+   refresh — bypasses the cache). Not just F5, **Ctrl+F5**.
+7. **Check:** the footer below must say **v0.9.1**, and below the hero it must
+   say "Build v0.9.1 — landing fix". If v0.9.1 is not visible, the old build
+   is still running — repeat from step 2.
+8. If it still appears white: press **F12** → **Network** tab → reload the
+   page → look at the `index-*.css` line: it must be **200**. If it is **404**
+   or **failed**, send a screenshot of it — then the problem is serving the
+   file, not the code.
 
-## Kya pending hai (is fix se nahi badla)
+## What is pending (not changed by this fix)
 
 - PC handover list (Ollama, PgVector, latency, httpOnly cookies, password reset,
-  RBAC refusal phrasing) — `docs/MONITORING.md` §8 me hai, ye fix usko nahi
-  chhedta.
-- Ye fix sirf landing + login/register ke critical colours ka safety net hai.
-  Baaki pages Tailwind par hi hain — agar kabhi wahan bhi aisa masla aaye to
-  wahi plain-CSS pattern lagana hai.
+  RBAC refusal phrasing) — in `docs/MONITORING.md` §8; this fix does not
+  touch it.
+- This fix is only a safety net for the critical colours of the landing page
+  and login/register pages. The remaining pages still rely on Tailwind — if
+  the same issue ever appears there, apply the same plain-CSS pattern.

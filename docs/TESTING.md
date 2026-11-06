@@ -32,7 +32,7 @@ service (see docs/SPRINT3.md).
 | A1 | Service login | 200 | 200 | PASS |
 | A2 | Service KYC question (EN) | 200 + citations | 200, 5 citations (KYC p.1 top), 5.9–6.4 s | PASS |
 | A3 | Service KYC citations RETAIL only | no AML/SAMA/HR/PDPL | KYC, Account Opening, Charges only | PASS |
-| A4 | Service feedback thumbs-up | 200 | 200, "Shukriya, feedback mil gaya" | PASS |
+| A4 | Service feedback thumbs-up | 200 | 200, "Thank you, your feedback was received" | PASS |
 | A5 | Service logout | 200 | 200 | PASS |
 | B1 | Compliance login | 200 | 200 | PASS |
 | B2 | Compliance AML question (AR) | AML citation | AML Policy cited (top), 0.18–0.25 s | PASS |
@@ -48,8 +48,8 @@ service (see docs/SPRINT3.md).
 | D4 | Service GET /documents/02-aml-policy.pdf | 404 | 404 | PASS |
 | D5 | Service upload | 403 | 403 | PASS |
 | D6 | Service GET /admin/audit-logs | 403 | 403 | PASS |
-| E1 | Out-of-scope ("weather in Jeddah") | refusal, 0 citations | refused, "Is document me ye maloomat nahi hai." | PASS |
-| E2 | Service AML question | RBAC refusal, 0 citations | rbac-refusal, "Aap ke role ko is topic ke documents dekhne ki ijazat nahi hai" | PASS |
+| E1 | Out-of-scope ("weather in Jeddah") | refusal, 0 citations | refused, "This information is not in the documents." | PASS |
+| E2 | Service AML question | RBAC refusal, 0 citations | rbac-refusal, "Your role does not have access to documents on this topic" | PASS |
 | E3 | Service HR-leave question | RBAC refusal, 0 citations | rbac-refusal, 0 citations | PASS |
 
 **Journeys: 25/25 PASS, 0 FAIL** (second full run; first run was 24/25 —

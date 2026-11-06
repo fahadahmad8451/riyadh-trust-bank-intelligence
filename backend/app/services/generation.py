@@ -18,7 +18,7 @@ Generation modes (the actual mode is always returned in the response):
 
 Guardrail: if the best vector score is below REFUSAL_THRESHOLD, or
 retrieval returns nothing, the answer is the refusal
-"Is document me ye maloomat nahi hai" (EN) / "هذه المعلومات غير موجودة
+"This information is not in the documents." (EN) / "هذه المعلومات غير موجودة
 في المستندات" (AR), with empty citations. PII-like 10-digit numbers
 are masked in answers.
 """
@@ -36,18 +36,18 @@ from app.services.topic_gate import gated_department
 logger = logging.getLogger("rtb.generation")
 
 SYSTEM_PROMPT = (
-    "Sirf diye gaye context se jawab do. Agar jawab context me nahi, to "
-    "'Is document me ye maloomat nahi hai' kaho. Har claim ke sath "
-    "[Doc, Page] citation do."
+    "Answer only from the given context. If the answer is not in the "
+    "context, say 'This information is not in the documents.' Give a "
+    "[Doc, Page] citation with every claim."
 )
 OLLAMA_MODEL = "llama3.1:8b"
 OLLAMA_TIMEOUT = 120.0
-REFUSAL_EN = "Is document me ye maloomat nahi hai."
+REFUSAL_EN = "This information is not in the documents."
 REFUSAL_AR = "هذه المعلومات غير موجودة في المستندات."
 # Sprint 4 — RBAC-blocked topic refusal (clean, instead of stitching an
 # answer from allowed chunks that merely share words with the question).
-RBAC_REFUSAL_EN = ("Aap ke role ko is topic ke documents dekhne ki ijazat "
-                   "nahi hai. Please ask your administrator or the "
+RBAC_REFUSAL_EN = ("Your role does not have access to documents on this "
+                   "topic. Please ask your administrator or the "
                    "Compliance Department.")
 RBAC_REFUSAL_AR = ("ليس لديك صلاحية للاطلاع على مستندات هذا الموضوع. "
                    "يرجى التواصل مع المسؤول أو قسم الامتثال.")

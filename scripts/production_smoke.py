@@ -68,7 +68,7 @@ def main() -> int:
         body = res.json().get("data", {}) if res.status_code == 200 else {}
         check("health environment=production", body.get("environment") == "production",
               f"got {body.get('environment')!r}")
-        check("health version 0.10.0", body.get("version") == "0.10.0",
+        check("health version 0.10.1", body.get("version") == "0.10.1",
               f"got {body.get('version')!r}")
         check("health demo_accounts_enabled=false",
               body.get("demo_accounts_enabled") is False,

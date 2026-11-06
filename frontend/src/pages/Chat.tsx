@@ -98,7 +98,7 @@ export default function Chat() {
     try {
       await api.feedback(msg.messageId, rating)
       setMessages((m) => m.map((x, j) => (j === index ? { ...x, feedback: rating } : x)))
-      toast('Shukriya, feedback mil gaya.', 'success')
+      toast('Thank you, your feedback was received.', 'success')
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Feedback could not be sent.', 'error')
     } finally {

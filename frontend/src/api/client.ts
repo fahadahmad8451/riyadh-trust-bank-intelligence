@@ -363,9 +363,9 @@ export interface DemoAccount {
 }
 
 export const DEMO_ACCOUNTS: DemoAccount[] = [
-  { email: 'admin@rtb.local', password: 'Admin123!', label: 'Admin — Branch Manager (sab kuch)' },
+  { email: 'admin@rtb.local', password: 'Admin123!', label: 'Admin — Branch Manager (full access)' },
   { email: 'compliance@rtb.local', password: 'Compliance123!', label: 'Compliance Officer (Retail + Compliance)' },
-  { email: 'service@rtb.local', password: 'Service123!', label: 'Customer Service (sirf Retail)' },
+  { email: 'service@rtb.local', password: 'Service123!', label: 'Customer Service (Retail only)' },
 ]
 
 export interface PasswordResetRequestRow {
