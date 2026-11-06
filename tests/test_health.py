@@ -21,7 +21,7 @@ def test_health_returns_200_and_ok():
     body = res.json()
     assert body["success"] is True
     assert body["data"]["status"] == "ok"
-    assert body["data"]["version"] == "0.10.1"
+    assert body["data"]["version"] == "0.10.2"
 
 
 def test_metrics_lists_pending_endpoints():

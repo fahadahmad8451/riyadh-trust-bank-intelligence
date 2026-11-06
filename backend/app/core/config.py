@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     app_name: str = "Riyadh Trust Bank — Enterprise Intelligence Platform"
-    version: str = "0.10.1"
+    version: str = "0.10.2"
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
     vector_store_dir: str = os.getenv("VECTOR_STORE_DIR", "data/vector_store")
     environment: str = os.getenv("ENVIRONMENT", "development")
@@ -54,8 +54,16 @@ class Settings(BaseSettings):
     # must allow the staging web origin. Comma-separated list; dev
     # default covers both local web ports. Production must set this
     # explicitly to its own origin only.
+    # v0.10.2: BOTH host spellings are allowed for every local web
+    # port (localhost AND 127.0.0.1). The frontend now calls the API
+    # on the same host the page was opened on, so the browser may
+    # arrive from either spelling — allowing only one of them would
+    # break login from the other (CORS preflight failure). Still
+    # explicit local origins only — no wildcard, ever.
     cors_origins: str = os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000,http://localhost:3001"
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:3001,http://127.0.0.1:3001",
     )
     # Production (v0.8): demo accounts (admin@rtb.local etc.) are OFF
     # by default in production — RTB_DEMO_ACCOUNTS=0. Dev/staging keep

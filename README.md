@@ -16,7 +16,7 @@ Employees at a bank waste hours hunting for the right policy, contract, or compl
 
 - **Fictional bank, synthetic data only.** "Riyadh Trust Bank" is not a real bank. All 8 documents (24 pages) are fictional, created for this demo. **No real customer data, ever.**
 - **Local-first, $0.** Runs on a laptop without Docker or any cloud service: Python venv + Node + local PostgreSQL. No paid APIs, no paid LLM — answers run in extractive-fallback mode until Ollama is installed.
-- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.1).
+- **Full process, one project at a time:** Requirements → Estimate → Design → Setup → Development (4 sprints) → Testing → Staging → Production → Monitoring. This repo is the finished Project 1 (v0.10.2).
 
 ## Features
 
@@ -128,11 +128,11 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 
 ## Docs
 
-- `docs/SETUP.md` — detailed setup · `docs/SPRINT1.md` — ingestion + vector DB · `docs/SPRINT2.md` — RAG + citations · `docs/SPRINT3.md` — login, RBAC, audit, admin UI · `docs/SPRINT4.md` — evaluation + polish · `docs/TESTING.md` — test report (CONDITIONAL GO) · `docs/STAGING.md` — staging environment · `docs/FRONTEND.md` — professional redesign + auth · `docs/PRODUCTION.md` — production hardening + runbook · `docs/MONITORING.md` — metrics, alerts, dashboard · `docs/LANDING-FIX.md` — landing page fix (v0.9.1) · `docs/LIMITATIONS-FIX.md` — v0.10.0 fix report (what was closed, what stays PC-only)
+- `docs/SETUP.md` — detailed setup · `docs/SPRINT1.md` — ingestion + vector DB · `docs/SPRINT2.md` — RAG + citations · `docs/SPRINT3.md` — login, RBAC, audit, admin UI · `docs/SPRINT4.md` — evaluation + polish · `docs/TESTING.md` — test report (CONDITIONAL GO) · `docs/STAGING.md` — staging environment · `docs/FRONTEND.md` — professional redesign + auth · `docs/PRODUCTION.md` — production hardening + runbook · `docs/MONITORING.md` — metrics, alerts, dashboard · `docs/LANDING-FIX.md` — landing page fix (v0.9.1) · `docs/LIMITATIONS-FIX.md` — v0.10.0 fix report (what was closed, what stays PC-only) · `docs/LOGIN-FIX.md` — login bounce fix (v0.10.2)
 
 ---
 
-## Build history (v0.1 → v0.10.1)
+## Build history (v0.1 → v0.10.2)
 
 > The section below is a chronological build log, written as each version was completed. Some older lines describe the state at the time, when a feature had not been built yet; the current state is described in "What it is" above. No facts have been removed.
 
@@ -142,6 +142,8 @@ infra/      docker-compose.optional.yml (OPTIONAL only — Docker is not require
 > Docker is optional only (`infra/docker-compose.optional.yml`) — for machines where Docker does run.
 
 Enterprise Intelligence Platform for a fictional Saudi bank (Riyadh Trust Bank) — a portfolio project, not a real company, with no real customer data.
+
+Status: **v0.10.2 DONE — Login bounce fixed.** Browser login no longer bounces back to the sign-in page: the frontend now calls the API on the same host the page was opened on (localhost or 127.0.0.1), so the SameSite=Lax httpOnly cookies are sent on every request, and CORS allows both local host spellings. Verified in a real headless browser from both hosts (login → chat → reload still logged in → logout). Details in `docs/LOGIN-FIX.md`.
 
 Status: **v0.10.1 DONE — No Roman Urdu.** Every user-facing string, API message, doc, and code comment is now 100% professional English: demo account labels, feedback message, RBAC and general refusals, system prompt, and all docs (PRODUCTION, STAGING, SETUP, LANDING-FIX, SPRINT2, SPRINT4, TESTING). Full wordlist scan: 0 matches. Pytest 142 passed.
 

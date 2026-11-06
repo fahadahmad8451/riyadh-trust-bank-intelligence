@@ -7,12 +7,36 @@
 // the 401 path retries once via POST /auth/refresh (cookie-based).
 // No fake data: every function performs a real fetch and surfaces errors.
 //
-// Staging (v0.6): when built with --mode staging, VITE_API_URL points
-// at the staging API (http://127.0.0.1:8001) and the browser calls it
-// directly (CORS allows localhost:3001, allow_credentials=True). In
-// dev it is empty, so calls stay relative (/api/...) and go through
-// the Vite dev proxy as before.
-const API_BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace(/\/$/, '')
+// v0.10.2 — same-host API base (fixes the login bounce).
+// Root cause: the staging/production builds baked in
+// VITE_API_URL=http://127.0.0.1:<api-port>, while the user opens the
+// page at http://localhost:<web-port>. That is cross-site, so the
+// browser does NOT send SameSite=Lax httpOnly cookies on fetch POSTs:
+// login returned 200 (the Set-Cookie header arrived), but the next
+// /chat and /auth/refresh calls went out WITHOUT cookies -> 401 ->
+// the app bounced back to the login page. API clients (curl/pytest)
+// never showed this — SameSite only applies in a real browser.
+// Fix: when VITE_API_URL is set, keep its protocol, port and path
+// (the override still decides WHERE the API listens), but swap its
+// hostname for window.location.hostname — the host the page was
+// actually opened on. So the API is always same-site, whether the
+// user opens localhost or 127.0.0.1, and the cookies are sent.
+// When VITE_API_URL is empty (dev), calls stay relative (/api/...)
+// and go through the Vite dev proxy as before. Fail-open: if the
+// env value cannot be parsed as a URL, use it unchanged.
+function resolveApiBase(): string {
+  const raw = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').trim().replace(/\/$/, '')
+  if (!raw) return ''
+  if (!/^https?:\/\//i.test(raw)) return raw
+  try {
+    const u = new URL(raw)
+    u.hostname = window.location.hostname
+    return u.toString().replace(/\/$/, '')
+  } catch {
+    return raw
+  }
+}
+const API_BASE = resolveApiBase()
 function url(path: string): string {
   return `${API_BASE}${path}`
 }

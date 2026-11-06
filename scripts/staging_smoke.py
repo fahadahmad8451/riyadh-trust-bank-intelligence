@@ -119,7 +119,7 @@ class Smoke:
                    res.status_code == 200 and data.get("environment") == "staging",
                    f"HTTP {res.status_code}, environment={data.get('environment')}, "
                    f"version={data.get('version')}")
-        self.check("health version 0.10.1", data.get("version") == "0.10.1",
+        self.check("health version 0.10.2", data.get("version") == "0.10.2",
                    f"version={data.get('version')}")
         res = self.client.get("/api/v1/metrics")
         mdata = res.json().get("data", {}) if res.status_code == 200 else {}
