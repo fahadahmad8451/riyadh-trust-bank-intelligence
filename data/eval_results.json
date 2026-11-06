@@ -1,0 +1,121 @@
+{
+  "method": "local-ragas-style (no LLM judge)",
+  "ragas_used": false,
+  "ragas_note": "ragas is NOT installed, and RAGAS needs a paid LLM judge (OpenAI/Azure) — so this run uses local RAGAS-style metrics instead, labelled as such everywhere.",
+  "targets": {
+    "faithfulness": 0.85,
+    "context_recall": 0.8,
+    "answer_relevancy": 0.85
+  },
+  "question_count": 2,
+  "aggregates": {
+    "faithfulness": 1.0,
+    "context_recall": 1.0,
+    "answer_relevancy": 0.6594,
+    "top_doc_accuracy": 1.0,
+    "phrase_present_rate": 0.5,
+    "refused_count": 0,
+    "latency_ms_p50": 3507.7,
+    "latency_ms_p95": 5066.9
+  },
+  "verdict_vs_targets": {
+    "faithfulness": true,
+    "context_recall": true,
+    "answer_relevancy": false
+  },
+  "all_targets_met": false,
+  "run_seconds": 7.6,
+  "run_at": "2026-11-06T05:38:59Z",
+  "questions": [
+    {
+      "id": "e01",
+      "question": "What documents are needed for KYC account opening?",
+      "language": "en",
+      "expected_documents": [
+        "01-kyc-policy.pdf",
+        "05-account-opening-policy.pdf"
+      ],
+      "expected_page": 1,
+      "expected_phrase": "National ID card",
+      "top_document": "01-kyc-policy.pdf",
+      "top_doc_correct": true,
+      "context_recall": 1.0,
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.7524,
+      "phrase_present": false,
+      "refused": false,
+      "answer": "According to the bank documents:\n- Documents Needed for Account Opening\nTo open a personal account, the customer must provide the following documents. [KYC Policy — Know Your Customer, page 1]\n- 3.4 Additional documents for special cases\nA guardian opening an account for a minor must provide the minor's birth certificate and the guardian's own\nidentity document. [KYC Policy — Know Your Customer, page 1]\n- Documents Needed for Account Opening\nWhat documents are needed for KYC account opening? [Account Opening Policy, page 1]\n- Account Opening Policy\nDocument: Account Opening Policy | Version: 1.0 | Department: Retail Banking | Effective: January 2026 |\nReview: January 2027\n1. [Account Opening Policy, page 1]\n- Record Keeping\nAll KYC documents, verification notes and risk ratings must be kept for at least ten years after the account is\nclosed. [KYC Policy — Know Your Customer, page 2]\n- If a customer's documents expire and are not renewed within 30 days,\nthe account is restricted until the documents are updated. [KYC Policy — Know Your Customer, page 2]",
+      "generation_mode": "extractive-fallback",
+      "latency_ms": 5240.2,
+      "citations": [
+        {
+          "document_id": "01-kyc-policy.pdf",
+          "page_no": 1,
+          "score": 6.5185
+        },
+        {
+          "document_id": "05-account-opening-policy.pdf",
+          "page_no": 1,
+          "score": 6.0013
+        },
+        {
+          "document_id": "01-kyc-policy.pdf",
+          "page_no": 2,
+          "score": 4.0719
+        },
+        {
+          "document_id": "05-account-opening-policy.pdf",
+          "page_no": 2,
+          "score": 2.3991
+        },
+        {
+          "document_id": "08-pdpl-privacy-summary.pdf",
+          "page_no": 1,
+          "score": 0.3541
+        }
+      ]
+    },
+    {
+      "id": "e02",
+      "question": "What is the AML reporting threshold?",
+      "language": "en",
+      "expected_documents": [
+        "02-aml-policy.pdf"
+      ],
+      "expected_page": 1,
+      "expected_phrase": "SAR 60,000",
+      "top_document": "02-aml-policy.pdf",
+      "top_doc_correct": true,
+      "context_recall": 1.0,
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.5664,
+      "phrase_present": true,
+      "refused": false,
+      "answer": "According to the bank documents:\n- AML Reporting Threshold\nThe AML reporting threshold is a key rule in this policy. [Anti-Money Laundering (AML) Policy, page 1]\n- Multiple linked cash transactions that together total SAR 60,000 or\nmore within 7 days must also be reported, even if each single transaction is below the threshold. [Anti-Money Laundering (AML) Policy, page 1]\n- Sanctions Screening\nEvery customer name and every payment must be checked against the sanctions lists before a transaction is\ncompleted. [Anti-Money Laundering (AML) Policy, page 2]\n- Any employee who is unsure\nwhether a transaction is suspicious should ask the Compliance Officer — asking is always better than staying\nsilent. [Anti-Money Laundering (AML) Policy, page 2]\n- Compliance Calendar\nThe Compliance Department keeps a calendar of all SAMA reporting deadlines and inspection dates. [SAMA Compliance Summary, page 2]\n- What Happens if the Bank Breaks the Rules\nSAMA can warn the bank, fine the bank, restrict its activities, remove a manager, or in extreme cases withdraw\nthe licence. [SAMA Compliance Summary, page 2]",
+      "generation_mode": "extractive-fallback",
+      "latency_ms": 1775.2,
+      "citations": [
+        {
+          "document_id": "02-aml-policy.pdf",
+          "page_no": 1,
+          "score": 2.6197
+        },
+        {
+          "document_id": "02-aml-policy.pdf",
+          "page_no": 2,
+          "score": -4.3189
+        },
+        {
+          "document_id": "03-sama-compliance-summary.pdf",
+          "page_no": 2,
+          "score": -10.5115
+        },
+        {
+          "document_id": "03-sama-compliance-summary.pdf",
+          "page_no": 1,
+          "score": -11.0771
+        }
+      ]
+    }
+  ]
+}

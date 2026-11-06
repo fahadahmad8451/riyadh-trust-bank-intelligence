@@ -1,0 +1,59 @@
+# OPTIONAL ONLY — Docker is NOT required for this project.
+# Fahad's laptop: BIOS password-locked, VT-x Disabled, so Docker Desktop
+# / VirtualBox cannot run there. PRIMARY setup is local Windows without
+# Docker — see README.md and docs/SETUP.md.
+# This file is only for someone whose PC *does* run Docker, and for a
+# future staging machine. Do NOT run this on Fahad's laptop.
+name: rtb-intelligence
+services:
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports: ["3000:3000"]
+    depends_on: [api]
+    environment: [VITE_API_URL=http://api:8000]
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    ports: ["8000:8000"]
+    env_file: [../.env]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: celery -A app.services.worker worker --loglevel=info
+    env_file: [../.env]
+    depends_on: [redis, postgres]
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: rtb_intelligence
+      POSTGRES_USER: rtb
+      POSTGRES_PASSWORD: changeme
+    volumes: [rtb_pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rtb -d rtb_intelligence"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [rtb_ollama:/root/.ollama]
+volumes:
+  rtb_pgdata:
+  rtb_ollama:

@@ -1,0 +1,102 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --navy: #0b2c4a;
+  --gold: #c9a227;
+  --teal: #0e7c7b;
+}
+
+body {
+  font-family: Inter, 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  background: #f6f8fa;
+  color: #0f172a;
+}
+
+/* Typing indicator — three dots that bounce in turn (Chat page). */
+.typing-dots span {
+  display: inline-block;
+  animation: typing-bounce 1.2s infinite;
+}
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+/* Subtle scrollbars for the chat message list. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ------------------------------------------------------------------ */
+/* LANDING-FIX v0.9.1 — plain-CSS fallbacks for critical colours.      */
+/* The landing page went blank/faint on Fahad's PC (white-on-white:    */
+/* hero navy background missing, white heading + stats invisible).     */
+/* The VM build was correct, so the cause was a stale build / CSS not  */
+/* loading on his PC. These plain classes sit in the SAME stylesheet   */
+/* as Tailwind and are applied ALONGSIDE the Tailwind classes, so if   */
+/* a Tailwind colour class is ever missing or stale, the plain CSS     */
+/* still paints the hero, buttons and footer correctly. Do NOT remove  */
+/* them — they are the safety net, not dead code.                      */
+/* ------------------------------------------------------------------ */
+.hero-bg {
+  background-color: #0b2c4a !important;
+}
+.hero-bg h1 {
+  color: #ffffff !important;
+}
+.hero-bg .hero-sub {
+  color: #cbd5e1 !important;
+}
+.hero-bg .hero-stat-value {
+  color: #ffffff !important;
+}
+.hero-bg .hero-stat-label {
+  color: #cbd5e1 !important;
+}
+.hero-bg .hero-kicker {
+  color: #d4af37 !important;
+}
+.hero-gold-btn {
+  background-color: #c9a227 !important;
+  color: #071f36 !important;
+}
+.hero-outline-btn {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: #ffffff !important;
+}
+.footer-bg {
+  background-color: #071f36 !important;
+  color: #cbd5e1;
+}
+.footer-bg .footer-title {
+  color: #ffffff !important;
+}
+/* Dark primary button (Sign in / Create account) — white text on navy. */
+.dark-btn {
+  background-color: #0b2c4a !important;
+  color: #ffffff !important;
+}
